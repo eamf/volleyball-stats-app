@@ -54,13 +54,12 @@ export function LoginForm() {
         setMessage('Account created successfully! Please check your email for verification if required.');
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      
       // Handle specific error messages
       let errorMessage = 'An error occurred';
       
       if (err?.message) {
         const msg = err.message.toLowerCase();
+        
         if (msg.includes('email already registered') || msg.includes('user already registered')) {
           errorMessage = 'An account with this email already exists. Try signing in instead.';
         } else if (msg.includes('email not confirmed')) {
@@ -207,13 +206,6 @@ export function LoginForm() {
             </button>
           </div>
         </form>
-
-        {/* Development helper */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center">
-            For development: Check your Supabase dashboard authentication settings if you encounter issues.
-          </p>
-        </div>
       </Card>
     </div>
   );
