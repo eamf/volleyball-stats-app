@@ -1,86 +1,93 @@
-// src/components/Navigation.tsx - Simple version with basic icons
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/Button';
+'use client';
+
+import { createContext, useContext, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { 
   Home, Users, Trophy, Calendar, BarChart2, 
-  User, LogOut, Menu, X
+  User, LogOut, Menu, X 
 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import clsx from 'clsx';
+import { useAuth } from '@/contexts/AuthContext';
 
-type DashboardView = 'overview' | 'clubs' | 'championships' | 'teams' | 'players' | 'games' | 'game-recording' | 'statistics' | 'profile';
-
-interface NavigationProps {
-  currentView: DashboardView;
-  onViewChange: (view: DashboardView) => void;
-  userRole?: string;
-}
-
-interface NavItemProps {
-  item: {
-    id: DashboardView;
-    label: string;
-    icon: React.ReactNode;
-  };
-}
-
-const navItems = [
-  { id: 'overview', label: 'Dashboard', icon: <Home className="h-5 w-5" /> },
-  { id: 'clubs', label: 'Clubs', icon: <Users className="h-5 w-5" /> },
-  { id: 'championships', label: 'Championships', icon: <Trophy className="h-5 w-5" /> },
-  { id: 'teams', label: 'Teams', icon: <Users className="h-5 w-5" /> },
-  { id: 'players', label: 'Players', icon: <Users className="h-5 w-5" /> },
-  { id: 'games', label: 'Games', icon: <Calendar className="h-5 w-5" /> },
-  { id: 'statistics', label: 'Statistics', icon: <BarChart2 className="h-5 w-5" /> },
-  { id: 'profile', label: 'Profile', icon: <User className="h-5 w-5" /> },
-];
-
-function NavItem({ item }: NavItemProps) {
-  const { currentView, onViewChange } = useNavigation();
-  
-  return (
-    <button
-      onClick={() => onViewChange(item.id)}
-      className={clsx(
-        'flex items-center space-x-3 w-full px-3 py-2 rounded-md transition-colors',
-        currentView === item.id
-          ? 'bg-blue-50 text-blue-700'
-          : 'text-gray-700 hover:bg-gray-100'
-      )}
-    >
-      {item.icon}
-      <span className="font-medium">{item.label}</span>
-    </button>
-  );
-}
-
-// Create a context to pass down the current view and change handler
-const NavigationContext = React.createContext<{
-  currentView: DashboardView;
-  onViewChange: (view: DashboardView) => void;
+// Navigation context for state management
+const NavigationContext = createContext<{
+  currentView: string;
+  onViewChange: (view: string) => void;
 }>({
   currentView: 'overview',
   onViewChange: () => {},
 });
 
-function useNavigation() {
-  return React.useContext(NavigationContext);
+const useNavigation = () => useContext(NavigationContext);
+
+// Navigation items
+const navItems = [
+  { id: 'overview', label: 'Dashboard', icon: <Home className="h-5 w-5" />, path: '/dashboard' },
+  { id: 'clubs', label: 'Clubs', icon: <Users className="h-5 w-5" />, path: '/dashboard/clubs' },
+  { id: 'championships', label: 'Championships', icon: <Trophy className="h-5 w-5" />, path: '/dashboard/championships' },
+  { id: 'teams', label: 'Teams', icon: <Users className="h-5 w-5" />, path: '/dashboard/teams' },
+  { id: 'players', label: 'Players', icon: <Users className="h-5 w-5" />, path: '/dashboard/players' },
+  { id: 'games', label: 'Games', icon: <Calendar className="h-5 w-5" />, path: '/dashboard/games' },
+  { id: 'statistics', label: 'Statistics', icon: <BarChart2 className="h-5 w-5" />, path: '/dashboard/statistics' },
+  { id: 'profile', label: 'Profile', icon: <User className="h-5 w-5" />, path: '/dashboard/profile' },
+];
+
+interface NavigationProps {
+  currentView: string;
+  onViewChange: (view: string) => void;
+  userRole?: string;
 }
 
-export function Navigation({ currentView, onViewChange, userRole }: NavigationProps) {
+interface NavItemProps {
+  item: {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    path: string;
+  };
+}
+
+export function Navigation({ currentView, onViewChange, userRole = 'user' }: NavigationProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { signOut } = useAuth();
-  
-  // Filter items based on user role if needed
-  const filteredItems = navItems;
-  
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
+  const pathname = usePathname();
+
+  // Filter navigation items based on user role
+  const filteredNavItems = navItems.filter(item => {
+    // If user is not a director, hide certain items
+    if (userRole !== 'director') {
+      if (['championships'].includes(item.id)) {
+        return false;
+      }
     }
-  };
+    return true;
+  });
+
+  function NavItem({ item }: NavItemProps) {
+    const pathname = usePathname();
+    // Check if the current path starts with the item path
+    // This ensures that sub-routes also highlight the parent nav item
+    const isActive = pathname === item.path || 
+                    (item.path !== '/dashboard' && pathname.startsWith(item.path));
+    
+    return (
+      <Link 
+        href={item.path}
+        className={clsx(
+          'flex items-center space-x-3 w-full px-3 py-2 rounded-md transition-colors',
+          isActive
+            ? 'bg-blue-50 text-blue-700'
+            : 'text-gray-700 hover:bg-gray-100'
+        )}
+        onClick={() => setIsMobileMenuOpen(false)}
+      >
+        {item.icon}
+        <span className="font-medium">{item.label}</span>
+      </Link>
+    );
+  }
 
   return (
     <NavigationContext.Provider value={{ currentView, onViewChange }}>
@@ -118,28 +125,22 @@ export function Navigation({ currentView, onViewChange, userRole }: NavigationPr
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            {filteredItems.map((item) => (
+          {/* Navigation items */}
+          <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+            {filteredNavItems.map((item) => (
               <NavItem key={item.id} item={item} />
             ))}
           </nav>
 
-          {/* User section */}
+          {/* Footer */}
           <div className="p-4 border-t border-gray-200">
-            <div className="mb-3">
-              <p className="text-sm font-medium text-gray-900">{userRole}</p>
-              <p className="text-xs text-gray-600 capitalize">{userRole}</p>
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="w-full justify-start"
-              onClick={handleSignOut}
+            <button
+              onClick={signOut}
+              className="flex items-center space-x-3 w-full px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors"
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign out
-            </Button>
+              <LogOut className="h-5 w-5" />
+              <span className="font-medium">Sign Out</span>
+            </button>
           </div>
         </div>
       </div>

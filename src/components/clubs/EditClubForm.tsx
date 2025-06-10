@@ -1,4 +1,3 @@
-// src/components/clubs/AddClubForm.tsx
 'use client';
 
 import { useState } from 'react';
@@ -7,18 +6,27 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
-interface AddClubFormProps {
+type Club = {
+  id: string;
+  name: string;
+  city: string | null;
+  country: string;
+  founded_year: number | null;
+};
+
+interface EditClubFormProps {
+  club: Club;
   onComplete: () => void;
   onCancel: () => void;
   supabase: any;
 }
 
-export function AddClubForm({ onComplete, onCancel, supabase }: AddClubFormProps) {
+export function EditClubForm({ club, onComplete, onCancel, supabase }: EditClubFormProps) {
   const [formData, setFormData] = useState({
-    name: '',
-    city: '',
-    country: '',
-    founded_year: ''
+    name: club.name,
+    city: club.city || '',
+    country: club.country,
+    founded_year: club.founded_year ? String(club.founded_year) : ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +58,14 @@ export function AddClubForm({ onComplete, onCancel, supabase }: AddClubFormProps
         founded_year: formData.founded_year ? parseInt(formData.founded_year) : null
       };
 
-      // Insert into database
-      const { error: insertError } = await supabase
+      // Update in database
+      const { error: updateError } = await supabase
         .from('clubs')
-        .insert(clubData);
+        .update(clubData)
+        .eq('id', club.id);
 
-      if (insertError) {
-        throw new Error(insertError.message);
+      if (updateError) {
+        throw new Error(updateError.message);
       }
 
       // Success
@@ -70,7 +79,7 @@ export function AddClubForm({ onComplete, onCancel, supabase }: AddClubFormProps
 
   return (
     <Card className="p-6 mb-6">
-      <h2 className="text-xl font-bold mb-4">Add New Club</h2>
+      <h2 className="text-xl font-bold mb-4">Edit Club</h2>
       
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
@@ -138,7 +147,7 @@ export function AddClubForm({ onComplete, onCancel, supabase }: AddClubFormProps
           </Button>
           <Button type="submit" disabled={loading}>
             {loading ? <LoadingSpinner size="sm" className="mr-2" /> : null}
-            Save Club
+            Save Changes
           </Button>
         </div>
       </form>
