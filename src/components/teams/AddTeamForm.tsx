@@ -49,20 +49,41 @@ export function AddTeamForm({ onComplete, onCancel }: AddTeamFormProps) {
     setLoading(true);
     setError(null);
 
-    try {
-      const { error } = await supabase
-        .from('teams')
-        .insert({
-          name: formData.name,
-          club_id: formData.club_id,
-          championship_id: formData.championship_id || null,
-          division: formData.division || null,
-          team_color: formData.team_color,
-        });
+    // Validate required fields
+    if (!formData.name || !formData.club_id) {
+      setError('Team name and club are required');
+      setLoading(false);
+      return;
+    }
 
-      if (error) throw error;
+    try {
+      console.log('Submitting team data:', formData);
+      
+      // Prepare the data object with proper null handling
+      const teamData = {
+        name: formData.name,
+        club_id: formData.club_id,
+        championship_id: formData.championship_id || null,
+        division: formData.division || null,
+        team_color: formData.team_color,
+      };
+      
+      console.log('Sending to Supabase:', teamData);
+      
+      const { data, error } = await supabase
+        .from('teams')
+        .insert(teamData)
+        .select();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log('Team created successfully:', data);
       onComplete();
     } catch (error: any) {
+      console.error('Error creating team:', error);
       setError(error.message || 'Failed to create team');
     } finally {
       setLoading(false);
@@ -120,7 +141,7 @@ export function AddTeamForm({ onComplete, onCancel }: AddTeamFormProps) {
             onChange={(e) => setFormData({ ...formData, championship_id: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="">Select a championship (optional)</option>
+            <option value="">None</option>
             {championships.map((championship) => (
               <option key={championship.id} value={championship.id}>
                 {championship.name}
@@ -129,28 +150,27 @@ export function AddTeamForm({ onComplete, onCancel }: AddTeamFormProps) {
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Division
-            </label>
-            <Input
-              value={formData.division}
-              onChange={(e) => setFormData({ ...formData, division: e.target.value })}
-              placeholder="e.g., Division A"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Team Color
-            </label>
-            <input
-              type="color"
-              value={formData.team_color}
-              onChange={(e) => setFormData({ ...formData, team_color: e.target.value })}
-              className="w-full h-10 border border-gray-300 rounded-md"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Division
+          </label>
+          <Input
+            value={formData.division}
+            onChange={(e) => setFormData({ ...formData, division: e.target.value })}
+            placeholder="e.g., U16, Senior, etc."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Team Color
+          </label>
+          <Input
+            type="color"
+            value={formData.team_color}
+            onChange={(e) => setFormData({ ...formData, team_color: e.target.value })}
+            className="h-10 w-20"
+          />
         </div>
 
         <div className="flex space-x-3">

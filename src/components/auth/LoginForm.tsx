@@ -51,7 +51,9 @@ export function LoginForm() {
         setMessage('Signed in successfully!');
       } else {
         await signUp(email, password, fullName.trim(), role);
-        setMessage('Account created successfully! Please check your email for verification if required.');
+        setMessage('Account created successfully! You can now sign in.');
+        // Switch to login mode after successful signup
+        setIsLogin(true);
       }
     } catch (err: any) {
       // Handle specific error messages
@@ -59,18 +61,7 @@ export function LoginForm() {
       
       if (err?.message) {
         const msg = err.message.toLowerCase();
-        
-        if (msg.includes('email already registered') || msg.includes('user already registered')) {
-          errorMessage = 'An account with this email already exists. Try signing in instead.';
-        } else if (msg.includes('email not confirmed')) {
-          errorMessage = 'Please check your email and click the confirmation link before signing in.';
-        } else if (msg.includes('invalid login credentials')) {
-          errorMessage = 'Invalid email or password. Please check your credentials.';
-        } else if (msg.includes('signup is disabled')) {
-          errorMessage = 'Account registration is currently disabled. Please contact an administrator.';
-        } else if (msg.includes('password')) {
-          errorMessage = 'Password must be at least 6 characters long.';
-        } else if (msg.includes('email')) {
+        if (msg.includes('email') && msg.includes('format')) {
           errorMessage = 'Please enter a valid email address.';
         } else {
           errorMessage = err.message;

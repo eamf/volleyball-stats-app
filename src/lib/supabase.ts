@@ -5,13 +5,27 @@ import type { Database } from './database.types';
 
 // For client-side usage (in components) - recommended approach
 export const createClient = () => {
-  return createClientComponentClient<Database>();
+  return createClientComponentClient<Database>({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  });
 };
 
-// Alternative simple client
+// Alternative simple client with explicit headers
 export const supabase = createSupabaseClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: true,
+    },
+    global: {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    },
+  }
 );
 
 // Database type definitions for Supabase

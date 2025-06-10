@@ -16,7 +16,7 @@ export function AddChampionshipForm({ onComplete, onCancel }: AddChampionshipFor
   const [formData, setFormData] = useState({
     name: '',
     season: new Date().getFullYear().toString(),
-    start_date: '',
+    start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     description: '',
   });
@@ -25,26 +25,60 @@ export function AddChampionshipForm({ onComplete, onCancel }: AddChampionshipFor
   const { user } = useAuth();
   const supabase = createClient();
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted');
     setLoading(true);
     setError(null);
 
-    try {
-      const { error } = await supabase
-        .from('championships')
-        .insert({
-          name: formData.name,
-          season: formData.season,
-          start_date: formData.start_date,
-          end_date: formData.end_date || null,
-          description: formData.description || null,
-          created_by: user?.id,
-        });
+    // Validate required fields
+    if (!formData.name || !formData.season || !formData.start_date) {
+      setError('Championship name, season, and start date are required');
+      setLoading(false);
+      return;
+    }
 
-      if (error) throw error;
+    try {
+      console.log('Submitting championship data:', formData);
+      console.log('User ID:', user?.id);
+      
+      // Create the data object explicitly
+      const championshipData = {
+        name: formData.name,
+        season: formData.season,
+        start_date: formData.start_date,
+        end_date: formData.end_date || null,
+        description: formData.description || null,
+        is_active: true,
+        created_by: user?.id || null,
+      };
+      
+      console.log('Data being sent to Supabase:', championshipData);
+      
+      // First, try a simpler insert to see if it works
+      const { data, error } = await supabase
+        .from('championships')
+        .insert(championshipData);
+      
+      console.log('Insert response:', { data, error });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log('Championship created successfully');
       onComplete();
     } catch (error: any) {
+      console.error('Error creating championship:', error);
       setError(error.message || 'Failed to create championship');
     } finally {
       setLoading(false);
@@ -63,63 +97,73 @@ export function AddChampionshipForm({ onComplete, onCancel }: AddChampionshipFor
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
             Championship Name *
           </label>
           <Input
+            id="name"
+            name="name"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={handleInputChange}
             required
-            placeholder="e.g., Spring League 2024"
+            placeholder="e.g., Summer League 2024"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="season" className="block text-sm font-medium text-gray-700 mb-1">
+            Season *
+          </label>
+          <Input
+            id="season"
+            name="season"
+            value={formData.season}
+            onChange={handleInputChange}
+            required
+            placeholder="e.g., 2024"
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Season *
-            </label>
-            <Input
-              value={formData.season}
-              onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-              required
-              placeholder="e.g., 2024"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-1">
               Start Date *
             </label>
             <Input
+              id="start_date"
+              name="start_date"
               type="date"
               value={formData.start_date}
-              onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+              onChange={handleInputChange}
               required
+            />
+          </div>
+          <div>
+            <label htmlFor="end_date" className="block text-sm font-medium text-gray-700 mb-1">
+              End Date
+            </label>
+            <Input
+              id="end_date"
+              name="end_date"
+              type="date"
+              value={formData.end_date}
+              onChange={handleInputChange}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            End Date
-          </label>
-          <Input
-            type="date"
-            value={formData.end_date}
-            onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
             Description
           </label>
           <textarea
+            id="description"
+            name="description"
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Championship description..."
+            onChange={handleInputChange}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter championship description"
           />
         </div>
 

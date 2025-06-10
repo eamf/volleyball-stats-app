@@ -23,25 +23,39 @@ export function AddClubForm({ onComplete, onCancel }: AddClubFormProps) {
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setFormData({
+      ...formData,
+      [name]: type === 'number' ? (value ? parseInt(value) : null) : value,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase
+      console.log('Submitting club data:', formData);
+      
+      // Make sure we're sending the data in the format expected by Supabase
+      const { error, data } = await supabase
         .from('clubs')
         .insert({
           name: formData.name,
           city: formData.city || null,
           country: formData.country,
           founded_year: formData.founded_year || null,
-        });
+        })
+        .select();
 
       if (error) {
+        console.error('Supabase error:', error);
         throw error;
       }
 
+      console.log('Club created successfully:', data);
       onComplete();
     } catch (error: any) {
       console.error('Error creating club:', error);
@@ -68,8 +82,9 @@ export function AddClubForm({ onComplete, onCancel }: AddClubFormProps) {
           </label>
           <Input
             id="name"
+            name="name"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={handleInputChange}
             required
             placeholder="Enter club name"
           />
@@ -82,8 +97,9 @@ export function AddClubForm({ onComplete, onCancel }: AddClubFormProps) {
             </label>
             <Input
               id="city"
+              name="city"
               value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+              onChange={handleInputChange}
               placeholder="Enter city"
             />
           </div>
@@ -94,8 +110,9 @@ export function AddClubForm({ onComplete, onCancel }: AddClubFormProps) {
             </label>
             <Input
               id="country"
+              name="country"
               value={formData.country}
-              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              onChange={handleInputChange}
               required
               placeholder="Enter country"
             />
@@ -108,9 +125,10 @@ export function AddClubForm({ onComplete, onCancel }: AddClubFormProps) {
           </label>
           <Input
             id="founded_year"
+            name="founded_year"
             type="number"
             value={formData.founded_year}
-            onChange={(e) => setFormData({ ...formData, founded_year: parseInt(e.target.value) || new Date().getFullYear() })}
+            onChange={handleInputChange}
             min="1800"
             max={new Date().getFullYear()}
             placeholder="Enter founded year"

@@ -42,7 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          try {
+            await fetchProfile(session.user.id);
+          } catch (error) {
+            console.error('Profile fetch failed:', error);
+            if (mounted) setLoading(false);
+          }
         } else {
           setLoading(false);
         }
@@ -62,7 +67,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          try {
+            await fetchProfile(session.user.id);
+          } catch (error) {
+            console.error('Profile fetch failed on auth change:', error);
+            if (mounted) setLoading(false);
+          }
         } else {
           setProfile(null);
           setLoading(false);

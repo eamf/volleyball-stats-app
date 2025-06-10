@@ -1,7 +1,7 @@
 // src/components/Dashboard.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigation } from '@/components/Navigation';
 import { ClubsManagement } from '@/components/clubs/ClubsManagement';
@@ -12,6 +12,11 @@ import { GamesManagement } from '@/components/games/GamesManagement';
 import { GameRecording } from '@/components/game-recording/GameRecording';
 import { Statistics } from '@/components/statistics/Statistics';
 import { Profile } from '@/components/profile/Profile';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { signOut } from '@/utils/auth';
+import { createClient } from '@/lib/supabase';
 
 export type DashboardView = 
   | 'overview'
@@ -26,28 +31,211 @@ export type DashboardView =
 
 export function Dashboard() {
   const [currentView, setCurrentView] = useState<DashboardView>('overview');
-  const { profile } = useAuth();
+  const { user, profile, loading } = useAuth();
+  const supabase = createClient();
+  
+  // Add state for data
+  const [clubs, setClubs] = useState<any[]>([]);
+  const [championships, setChampionships] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [games, setGames] = useState<any[]>([]);
+  const [statistics, setStatistics] = useState<any>({});
+  const [dataLoading, setDataLoading] = useState(false);
 
+  // Fetch data when component mounts
+  useEffect(() => {
+    if (user && profile) {
+      fetchData();
+    }
+  }, [user, profile]);
+
+  const fetchData = async () => {
+    setDataLoading(true);
+    try {
+      await Promise.all([
+        fetchClubs(),
+        fetchChampionships(),
+        fetchTeams(),
+        fetchPlayers(),
+        fetchGames(),
+        fetchStatistics()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const fetchClubs = async () => {
+    console.log('Fetching clubs...');
+    try {
+      const { data, error } = await supabase
+        .from('clubs')
+        .select('*')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching clubs:', error);
+        return;
+      }
+      
+      console.log('Clubs fetched:', data);
+      setClubs(data || []);
+    } catch (error) {
+      console.error('Error fetching clubs:', error);
+    }
+  };
+
+  const fetchChampionships = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('championships')
+        .select('*')
+        .order('start_date', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching championships:', error);
+        return;
+      }
+      
+      setChampionships(data || []);
+    } catch (error) {
+      console.error('Error fetching championships:', error);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching teams:', error);
+        return;
+      }
+      
+      setTeams(data || []);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    }
+  };
+
+  const fetchPlayers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .order('last_name');
+      
+      if (error) {
+        console.error('Error fetching players:', error);
+        return;
+      }
+      
+      setPlayers(data || []);
+    } catch (error) {
+      console.error('Error fetching players:', error);
+    }
+  };
+
+  const fetchGames = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('games')
+        .select('*')
+        .order('date', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching games:', error);
+        return;
+      }
+      
+      setGames(data || []);
+    } catch (error) {
+      console.error('Error fetching games:', error);
+    }
+  };
+
+  const fetchStatistics = async () => {
+    // This would be a more complex query in a real app
+    setStatistics({
+      totalTeams: teams.length,
+      totalPlayers: players.length,
+      totalGames: games.length
+    });
+  };
+
+  // Update the renderView function to use the actual data
   const renderView = () => {
     switch (currentView) {
       case 'clubs':
-        return <ClubsManagement />;
+        return <ClubsManagement 
+          clubs={clubs}
+          onRefresh={fetchClubs}
+          supabase={supabase} 
+        />;
       case 'championships':
-        return <ChampionshipsManagement />;
+        return <ChampionshipsManagement 
+          championships={championships}
+          onRefresh={fetchChampionships}
+          supabase={supabase}
+        />;
       case 'teams':
-        return <TeamsManagement />;
+        return <TeamsManagement 
+          teams={teams}
+          clubs={clubs}
+          championships={championships}
+          onRefresh={fetchTeams}
+          supabase={supabase}
+        />;
       case 'players':
-        return <PlayersManagement />;
+        return <PlayersManagement 
+          players={players}
+          teams={teams}
+          onRefresh={fetchPlayers}
+          supabase={supabase}
+        />;
       case 'games':
-        return <GamesManagement onStartGame={(gameId) => setCurrentView('game-recording')} />;
+        return <GamesManagement 
+          games={games}
+          teams={teams}
+          championships={championships}
+          onRefresh={fetchGames}
+          onStartRecording={() => setCurrentView('game-recording')}
+          supabase={supabase}
+        />;
       case 'game-recording':
-        return <GameRecording onFinish={() => setCurrentView('games')} />;
+        return <GameRecording 
+          games={games}
+          onFinish={() => setCurrentView('games')}
+          supabase={supabase}
+        />;
       case 'statistics':
-        return <Statistics />;
+        return <Statistics 
+          statistics={statistics}
+          clubs={clubs}
+          teams={teams}
+          games={games}
+          players={players}
+        />;
       case 'profile':
-        return <Profile />;
+        return <Profile 
+          user={user}
+          userProfile={profile}
+          onRefresh={() => {}}
+          supabase={supabase}
+        />;
       default:
-        return <DashboardOverview />;
+        return <DashboardOverview 
+          user={user} 
+          userProfile={profile}
+          statistics={statistics}
+          onNavigate={setCurrentView}
+        />;
     }
   };
 
@@ -60,9 +248,15 @@ export function Dashboard() {
       />
       
       {/* Main content with proper spacing for desktop navigation */}
-      <div className="lg:pl-64">
-        <main className="container mx-auto px-4 py-8">
-          {renderView()}
+      <div className="lg:ml-64">
+        <main className="p-6">
+          {dataLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : (
+            renderView()
+          )}
         </main>
       </div>
     </div>
