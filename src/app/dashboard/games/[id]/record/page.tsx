@@ -1284,614 +1284,493 @@ export default function GameRecordingPage() {
 
 
 
-      {/* Enhanced Real-Time Recording Interface */}
+      {/* 1. Bench - First Priority for Recording */}
       {isRecording && currentSet && (
-        <div className="grid grid-cols-12 gap-6 mb-6">
-          {/* Left Side: Enhanced Play Selection */}
-          <div className="col-span-5">
-            <Card className="p-4" style={{ height: '600px' }}>
-              <h3 className="text-lg font-semibold mb-4">Record Play</h3>
-              <div className="space-y-2">
+        <Card className="p-4 mb-6">
+          <h3 className="text-lg font-semibold mb-4">Lineup & Bench</h3>
+
+          {/* Home Team Only */}
+          <div className="max-w-2xl mx-auto">
+            {/* Team Name at Top */}
+            <div className="text-center mb-4">
+              <h4 className="text-lg font-semibold flex items-center justify-center">
+                <div
+                  className="w-5 h-5 rounded-full mr-2"
+                  style={{ backgroundColor: homeTeam?.team_color }}
+                />
+                {homeTeam?.name}
+              </h4>
+            </div>
+
+            {/* Position Boxes - Larger for better usability */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[
+                { pos: 'P4', label: 'P4' },
+                { pos: 'P3', label: 'P3' },
+                { pos: 'P2', label: 'P2' },
+                { pos: 'P5', label: 'P5' },
+                { pos: 'P6', label: 'P6' },
+                { pos: 'P1', label: 'P1' }
+              ].map(({ pos, label }) => (
+                <div
+                  key={pos}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center min-h-[80px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(pos, 'home')}
+                >
+                  <div className="text-sm font-medium text-gray-600 mb-1">{label}</div>
+                  {homeLineup[pos] ? (
+                    <div
+                      className="bg-blue-100 border border-blue-300 rounded px-2 py-1 cursor-pointer hover:bg-blue-200 text-sm"
+                      onClick={() => removePlayerFromCourt(pos, 'home')}
+                    >
+                      <div className="font-bold">#{homeLineup[pos]!.jersey_number}</div>
+                      <div className="text-xs truncate max-w-[60px]">
+                        {homeLineup[pos]!.full_name.split(' ')[0]}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm">Empty</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Bench - Larger grid for better visibility */}
+            <div>
+              <h5 className="text-base font-medium text-gray-700 mb-3">Bench</h5>
+              <div className="grid grid-cols-4 gap-2">
                 {getAvailablePlayers('home').map((player) => (
                   <div
                     key={player.id}
                     draggable
                     onDragStart={() => handleDragStart(player, 'home')}
                     onClick={() => setSelectedPlayer(player)}
-                    className={`w-full p-2 rounded text-center text-xs border transition-colors cursor-move ${
+                    className={`p-2 rounded-lg text-center text-sm border transition-colors cursor-move ${
                       selectedPlayer?.id === player.id
-                        ? 'bg-blue-100 border-blue-300'
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="font-bold">#{player.jersey_number}</div>
-                    <div className="truncate">{player.full_name.split(' ')[0]}</div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setSelectedPlayer(null)}
-                  className={`w-full p-2 rounded text-center text-xs border transition-colors ${
-                    selectedPlayer === null
-                      ? 'bg-blue-100 border-blue-300'
-                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  Team Play
-                </button>
-              </div>
-            </Card>
-          </div>
-
-          {/* Center: Court with Position Indicators */}
-          <div className="col-span-6">
-            <Card className="p-4">
-              <h3 className="text-sm font-semibold mb-3 text-center">Volleyball Court</h3>
-
-              {/* Simplified Court - Your Team Only */}
-              <div
-                className="relative bg-orange-100 border-2 border-gray-800 rounded-lg mx-auto cursor-crosshair"
-                style={{ width: '300px', height: '200px' }}
-                onClick={handleFieldClick}
-              >
-                {/* Court outline */}
-                <div className="absolute inset-1 border-2 border-white"></div>
-
-                {/* Net line at top */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gray-800"></div>
-
-                {/* 3m attack line */}
-                <div className="absolute top-1/3 left-1 right-1 h-0.5 bg-white"></div>
-
-                {/* Position indicators for your team */}
-                {[
-                  { pos: 'P5', x: '20%', y: '85%' }, // Left Back
-                  { pos: 'P6', x: '50%', y: '85%' }, // Middle Back
-                  { pos: 'P1', x: '80%', y: '85%' }, // Right Back (serving position)
-                  { pos: 'P4', x: '20%', y: '50%' }, // Left Front
-                  { pos: 'P3', x: '50%', y: '50%' }, // Middle Front
-                  { pos: 'P2', x: '80%', y: '50%' }  // Right Front
-                ].map(({ pos, x, y }) => (
-                  <div
-                    key={pos}
-                    className="absolute w-10 h-10 border-2 border-dashed border-gray-400 rounded-full flex items-center justify-center bg-white bg-opacity-75 text-xs font-bold cursor-pointer hover:bg-opacity-90"
-                    style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(pos, 'home')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (homeLineup[pos]) {
-                        removePlayerFromCourt(pos, 'home');
-                      }
-                    }}
-                  >
-                    {homeLineup[pos] ? `#${homeLineup[pos]!.jersey_number}` : pos}
-                  </div>
-                ))}
-
-                {/* Team label */}
-                <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-xs font-medium border">
-                  {homeTeam?.name}
-                </div>
-
-                {/* Recording indicator */}
-                {isRecordingPlay && (
-                  <div className="absolute inset-0 bg-blue-500 bg-opacity-20 border-2 border-blue-500 border-dashed rounded-lg flex items-center justify-center">
-                    <div className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium">
-                      Click to record play position
-                    </div>
-                  </div>
-                )}
-              </div>
-
-
-            </Card>
-          </div>
-
-          {/* Right Side: Play Selection & Recording */}
-          <div className="col-span-4">
-            <Card className="p-3 h-full">
-              <h3 className="text-sm font-semibold mb-3">Record Play</h3>
-
-              {/* Team Selection */}
-              <div className="mb-4">
-                <div className="text-sm font-medium text-gray-700 mb-2">Team:</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setSelectedTeam('home')}
-                    className={`p-3 rounded-lg text-sm border transition-colors ${
-                      selectedTeam === 'home'
                         ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
                     }`}
+                    title={player.full_name}
                   >
-                    <div className="flex items-center justify-center">
-                      <div
-                        className="w-3 h-3 rounded-full mr-2"
-                        style={{ backgroundColor: homeTeam?.team_color }}
-                      />
-                      <span className="font-medium">{homeTeam?.name}</span>
+                    <div className="font-bold text-sm">#{player.jersey_number}</div>
+                    <div className="text-xs truncate">
+                      {player.full_name.split(' ')[0]}
                     </div>
-                  </button>
-                  <button
-                    onClick={() => setSelectedTeam('away')}
-                    className={`p-3 rounded-lg text-sm border transition-colors ${
-                      selectedTeam === 'away'
-                        ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="flex items-center justify-center">
-                      <div
-                        className="w-3 h-3 rounded-full mr-2"
-                        style={{ backgroundColor: awayTeam?.team_color }}
-                      />
-                      <span className="font-medium">{awayTeam?.name}</span>
+                    <div className="text-xs text-gray-500 truncate">
+                      {player.primary_position}
                     </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Player Selection */}
-              {selectedTeam && (
-                <div className="mb-4">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Player:</div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    <button
-                      onClick={() => setSelectedPlayer(null)}
-                      className={`w-full p-3 rounded-lg border text-left text-sm transition-colors ${
-                        selectedPlayer === null
-                          ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      <div className="font-medium">Team Play</div>
-                      <div className="text-xs text-gray-500">No specific player</div>
-                    </button>
-
-                    {selectedTeam === 'home' ? (
-                      <>
-                        {/* Players on court */}
-                        {Object.values(homeLineup).filter(player => player !== null).map((player) => (
-                          <button
-                            key={player!.id}
-                            onClick={() => setSelectedPlayer(player)}
-                            className={`w-full p-2 rounded border text-left text-xs transition-colors ${
-                              selectedPlayer?.id === player!.id
-                                ? 'bg-blue-100 border-blue-300'
-                                : 'bg-green-50 border-green-200 hover:bg-green-100'
-                            }`}
-                          >
-                            <div className="font-medium">#{player!.jersey_number} {player!.full_name}</div>
-                            <div className="text-gray-500">On court - {player!.primary_position}</div>
-                          </button>
-                        ))}
-
-                        {/* Players on bench */}
-                        {getAvailablePlayers('home').map((player) => (
-                          <button
-                            key={player.id}
-                            onClick={() => setSelectedPlayer(player)}
-                            className={`w-full p-2 rounded border text-left text-xs transition-colors ${
-                              selectedPlayer?.id === player.id
-                                ? 'bg-blue-100 border-blue-300'
-                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                            }`}
-                          >
-                            <div className="font-medium">#{player.jersey_number} {player.full_name}</div>
-                            <div className="text-gray-500">On bench - {player.primary_position}</div>
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      /* Opponent team - simplified */
-                      <div className="text-center py-2">
-                        <div className="text-xs text-gray-500">
-                          Recording for {awayTeam?.name} (opponent team)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Play Type Selection */}
-              <div className="mb-4 flex-1">
-                <div className="text-sm font-medium text-gray-700 mb-2">Play Type:</div>
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                  {Object.entries(playTypes.reduce((acc, playType) => {
-                    if (!acc[playType.category]) {
-                      acc[playType.category] = [];
-                    }
-                    acc[playType.category].push(playType);
-                    return acc;
-                  }, {} as Record<string, PlayType[]>))
-                  .map(([category, categoryPlayTypes]) => (
-                    <div key={category}>
-                      <div className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-2 border-b border-gray-200 pb-1">
-                        {category}
-                      </div>
-                      <div className="grid grid-cols-1 gap-2 mb-2">
-                        {categoryPlayTypes.map((playType) => (
-                          <button
-                            key={playType.id}
-                            onClick={() => setSelectedPlayType(playType)}
-                            className={`p-3 rounded-lg border text-left text-sm transition-all ${
-                              selectedPlayType?.id === playType.id
-                                ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200 shadow-sm'
-                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="font-semibold">{playType.name}</div>
-                            <div className={`text-xs ${
-                              playType.default_value > 0 ? 'text-green-600' :
-                              playType.default_value < 0 ? 'text-red-600' : 'text-gray-500'
-                            }`}>
-                              {playType.default_value > 0 && `+${playType.default_value}`}
-                              {playType.default_value < 0 && `${playType.default_value}`}
-                              {playType.default_value === 0 && '0'} pts
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Selection Status */}
-              <div className="mb-3 p-2 bg-gray-50 rounded border">
-                <div className="text-xs text-gray-600 mb-1">Current Selection:</div>
-                <div className="text-xs">
-                  <div>Team: {selectedTeam ? (selectedTeam === 'home' ? homeTeam?.name : awayTeam?.name) : 'None'}</div>
-                  <div>Player: {selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'}</div>
-                  <div>Play: {selectedPlayType ? selectedPlayType.name : 'None'}</div>
-                </div>
-              </div>
-
-              {/* Record Button Section */}
-              <div className="mt-auto pt-4 border-t border-gray-200">
-                {selectedTeam && selectedPlayType ? (
-                  <div>
-                    <div className="bg-blue-50 p-3 rounded-lg mb-3">
-                      <div className="text-sm font-medium text-blue-800 mb-1">Ready to Record:</div>
-                      <div className="text-sm text-blue-700">
-                        <div>{selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'}</div>
-                        <div className="font-semibold">{selectedPlayType.name}</div>
-                        {selectedPlayType.default_value !== 0 && (
-                          <div className={`text-sm ${selectedPlayType.default_value > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {selectedPlayType.default_value > 0 ? '+' : ''}{selectedPlayType.default_value} point{Math.abs(selectedPlayType.default_value) !== 1 ? 's' : ''}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => {
-                        if (isRecordingPlay) {
-                          // If already recording, just record without position
-                          recordPlay();
-                        } else {
-                          // Start recording mode
-                          setIsRecordingPlay(true);
-                          // Auto-record after 3 seconds if no court click
-                          setTimeout(() => {
-                            if (isRecordingPlay) {
-                              recordPlay();
-                              setIsRecordingPlay(false);
-                            }
-                          }, 3000);
-                        }
-                      }}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 text-lg"
-                    >
-                      {isRecordingPlay ? '🎯 RECORD NOW' : '▶️ RECORD PLAY'}
-                    </Button>
-                    {isRecordingPlay && (
-                      <div className="text-sm text-center text-gray-600 mt-2 p-2 bg-yellow-50 rounded">
-                        Click court for position or wait 3s for general play
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <div className="text-sm text-gray-600 mb-2">Select team and play type to record</div>
-                    <div className="text-xs text-gray-500">
-                      1. Choose team → 2. Choose play type → 3. Record
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Instructions */}
-              {(!selectedTeam || !selectedPlayType) && (
-                <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-200">
-                  <div className="text-xs text-blue-700">
-                    <div className="font-medium mb-1">How to record a play:</div>
-                    <div>1. Select Team (Your Team or Opponent)</div>
-                    <div>2. Select Player (optional, defaults to Team play)</div>
-                    <div>3. Select Play Type (Ace, Kill, Error, etc.)</div>
-                    <div>4. Click RECORD PLAY</div>
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* Right Side: Complete Court for Ball-Hit Location */}
-          <div className="col-span-7">
-            <Card className="p-4">
-              <h3 className="text-lg font-semibold mb-4 text-center">Court - Ball Hit Location</h3>
-
-              <div className="flex justify-center">
-                <div
-                  className={`relative bg-orange-100 border-4 border-gray-800 rounded-lg ${
-                    isRecordingPlay ? 'cursor-crosshair' : ''
-                  }`}
-                  style={{
-                    width: '400px',
-                    height: '600px'
-                  }}
-                  onClick={handleFieldClick}
-                >
-                  {/* Court outline */}
-                  <div className="absolute inset-2 border-2 border-white"></div>
-
-                  {/* Net (horizontal across middle) */}
-                  <div
-                    className="absolute bg-gray-800"
-                    style={{
-                      left: '0',
-                      top: '50%',
-                      width: '100%',
-                      height: '4px',
-                      transform: 'translateY(-50%)'
-                    }}
-                  />
-
-                  {/* 3m attack lines */}
-                  <div
-                    className="absolute bg-white"
-                    style={{
-                      left: '2px',
-                      top: '33.33%',
-                      width: 'calc(100% - 4px)',
-                      height: '2px'
-                    }}
-                  />
-                  <div
-                    className="absolute bg-white"
-                    style={{
-                      left: '2px',
-                      top: '66.67%',
-                      width: 'calc(100% - 4px)',
-                      height: '2px'
-                    }}
-                  />
-
-                  {/* Position labels for reference - Vertical Layout */}
-                  {/* Home team positions (bottom half) */}
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '85%', transform: 'translate(-50%, -50%)' }}>P1</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '85%', transform: 'translate(-50%, -50%)' }}>P6</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '85%', transform: 'translate(-50%, -50%)' }}>P5</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '60%', transform: 'translate(-50%, -50%)' }}>P2</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '60%', transform: 'translate(-50%, -50%)' }}>P3</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '60%', transform: 'translate(-50%, -50%)' }}>P4</div>
-
-                  {/* Away team positions (top half) */}
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '15%', transform: 'translate(-50%, -50%)' }}>P1</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '15%', transform: 'translate(-50%, -50%)' }}>P6</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '15%', transform: 'translate(-50%, -50%)' }}>P5</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '40%', transform: 'translate(-50%, -50%)' }}>P2</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '40%', transform: 'translate(-50%, -50%)' }}>P3</div>
-                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '40%', transform: 'translate(-50%, -50%)' }}>P4</div>
-
-                  {/* Team labels - Vertical Layout */}
-                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
-                    {awayTeam?.name || 'Away'}
-                  </div>
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
-                    {homeTeam?.name || 'Home'}
-                  </div>
-
-                  {/* Play markers */}
-                  {plays.map((play, index) => (
-                    play.field_x && play.field_y && (
-                      <div
-                        key={index}
-                        className="absolute w-4 h-4 rounded-full border-2 border-white shadow-lg z-10"
-                        style={{
-                          left: `${play.field_x}%`,
-                          top: `${play.field_y}%`,
-                          backgroundColor: play.play_type?.is_positive ? '#10b981' : '#ef4444',
-                          transform: 'translate(-50%, -50%)'
-                        }}
-                        title={`${play.player?.full_name || 'Team'} - ${play.play_type?.name}`}
-                      />
-                    )
-                  ))}
-
-                  {isRecordingPlay && (
-                    <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center z-20">
-                      <div className="bg-white px-6 py-4 rounded-lg shadow-xl border-2 border-blue-300">
-                        <p className="text-sm font-medium text-gray-800 mb-2">Click anywhere on the court to record play</p>
-                        <div className="text-xs text-gray-600 mb-3">
-                          Recording: <span className="font-semibold">{selectedPlayType?.name}</span>
-                          {selectedPlayer && (
-                            <span> for {selectedPlayer.full_name} (#{selectedPlayer.jersey_number})</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsRecordingPlay(false);
-                          }}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Cancel Recording
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Compact Lineup Management */}
-      {isRecording && currentSet && (
-        <Card className="p-4 mb-6">
-          <h3 className="text-lg font-semibold mb-4">Lineup & Bench</h3>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Home Team */}
-            <div>
-              {/* Team Name at Top */}
-              <div className="text-center mb-3">
-                <h4 className="text-md font-semibold flex items-center justify-center">
-                  <div
-                    className="w-4 h-4 rounded-full mr-2"
-                    style={{ backgroundColor: homeTeam?.team_color }}
-                  />
-                  {homeTeam?.name}
-                </h4>
-              </div>
-
-              {/* Compact Position Boxes */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {[
-                  { pos: 'P4', label: 'P4' },
-                  { pos: 'P3', label: 'P3' },
-                  { pos: 'P2', label: 'P2' },
-                  { pos: 'P5', label: 'P5' },
-                  { pos: 'P6', label: 'P6' },
-                  { pos: 'P1', label: 'P1' }
-                ].map(({ pos, label }) => (
-                  <div
-                    key={pos}
-                    className="border-2 border-dashed border-gray-300 rounded p-2 text-center min-h-[60px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(pos, 'home')}
-                  >
-                    <div className="text-xs font-medium text-gray-600 mb-1">{label}</div>
-                    {homeLineup[pos] ? (
-                      <div
-                        className="bg-blue-100 border border-blue-300 rounded px-1 py-0.5 cursor-pointer hover:bg-blue-200 text-xs"
-                        onClick={() => removePlayerFromCourt(pos, 'home')}
-                      >
-                        <div className="font-bold">#{homeLineup[pos]!.jersey_number}</div>
-                      </div>
-                    ) : (
-                      <div className="text-gray-400 text-xs">-</div>
-                    )}
                   </div>
                 ))}
-              </div>
-
-              {/* Compact Bench */}
-              <div>
-                <h5 className="text-sm font-medium text-gray-700 mb-2">Bench</h5>
-                <div className="grid grid-cols-6 gap-1">
-                  {getAvailablePlayers('home').map((player) => (
-                    <div
-                      key={player.id}
-                      draggable
-                      onDragStart={() => handleDragStart(player, 'home')}
-                      onClick={() => setSelectedPlayer(player)}
-                      className={`p-1 rounded text-center text-xs border transition-colors cursor-move ${
-                        selectedPlayer?.id === player.id
-                          ? 'bg-blue-100 border-blue-300'
-                          : 'bg-white border-gray-200 hover:bg-gray-50'
-                      }`}
-                      title={player.full_name}
-                    >
-                      <div className="font-bold text-xs">#{player.jersey_number}</div>
-                      <div className="text-xs truncate" style={{ fontSize: '10px' }}>
-                        {player.full_name.split(' ')[0].substring(0, 4)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Away Team */}
-            <div>
-              {/* Team Name at Top */}
-              <div className="text-center mb-3">
-                <h4 className="text-md font-semibold flex items-center justify-center">
-                  <div
-                    className="w-4 h-4 rounded-full mr-2"
-                    style={{ backgroundColor: awayTeam?.team_color }}
-                  />
-                  {awayTeam?.name}
-                </h4>
-              </div>
-
-              {/* Compact Position Boxes */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {[
-                  { pos: 'P4', label: 'P4' },
-                  { pos: 'P3', label: 'P3' },
-                  { pos: 'P2', label: 'P2' },
-                  { pos: 'P5', label: 'P5' },
-                  { pos: 'P6', label: 'P6' },
-                  { pos: 'P1', label: 'P1' }
-                ].map(({ pos, label }) => (
-                  <div
-                    key={pos}
-                    className="border-2 border-dashed border-gray-300 rounded p-2 text-center min-h-[60px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(pos, 'away')}
-                  >
-                    <div className="text-xs font-medium text-gray-600 mb-1">{label}</div>
-                    {awayLineup[pos] ? (
-                      <div
-                        className="bg-red-100 border border-red-300 rounded px-1 py-0.5 cursor-pointer hover:bg-red-200 text-xs"
-                        onClick={() => removePlayerFromCourt(pos, 'away')}
-                      >
-                        <div className="font-bold">#{awayLineup[pos]!.jersey_number}</div>
-                      </div>
-                    ) : (
-                      <div className="text-gray-400 text-xs">-</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Compact Bench */}
-              <div>
-                <h5 className="text-sm font-medium text-gray-700 mb-2">Bench</h5>
-                <div className="grid grid-cols-6 gap-1">
-                  {getAvailablePlayers('away').map((player) => (
-                    <div
-                      key={player.id}
-                      draggable
-                      onDragStart={() => handleDragStart(player, 'away')}
-                      onClick={() => setSelectedPlayer(player)}
-                      className={`p-1 rounded text-center text-xs border transition-colors cursor-move ${
-                        selectedPlayer?.id === player.id
-                          ? 'bg-blue-100 border-blue-300'
-                          : 'bg-white border-gray-200 hover:bg-gray-50'
-                      }`}
-                      title={player.full_name}
-                    >
-                      <div className="font-bold text-xs">#{player.jersey_number}</div>
-                      <div className="text-xs truncate" style={{ fontSize: '10px' }}>
-                        {player.full_name.split(' ')[0].substring(0, 4)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-3 text-center text-xs text-gray-600">
+          <div className="mt-4 text-center text-sm text-gray-600">
             Drag players from bench to positions | Click positioned players to remove
           </div>
         </Card>
       )}
+
+      {/* 2. Play Selection Widget & Court - Side by Side */}
+      {isRecording && currentSet && (
+        <div className="mb-6">
+          {/* Side-by-side layout: Play Selection on left, Court on right */}
+          <div className="grid grid-cols-12 gap-6">
+
+            {/* Left Side: Play Selection Widget */}
+            <div className="col-span-7">
+              <Card className="p-4">
+                <h3 className="text-lg font-semibold mb-4 text-center">Record Play</h3>
+
+                {/* Compact two-column layout: Players on left, Play selection on right */}
+                <div className="grid grid-cols-12 gap-4">
+
+                  {/* Left Side: Player Selection */}
+                  <div className="col-span-5">
+                  <div className="bg-gray-50 rounded-lg p-3 h-full">
+                    <h4 className="text-base font-semibold mb-3 text-center">Players</h4>
+
+                    {/* Home Team Players - Only from Lineup */}
+                    {selectedTeam === 'home' && (
+                      <div>
+                        {/* Team Play Option */}
+                        <button
+                          onClick={() => setSelectedPlayer(null)}
+                          className={`w-full p-2 rounded-lg border text-center text-sm transition-colors mb-2 ${
+                            selectedPlayer === null
+                              ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
+                              : 'bg-white border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="font-medium">Team Play</div>
+                          <div className="text-xs text-gray-500">No specific player</div>
+                        </button>
+
+                        {/* Players from Lineup Only */}
+                        <div>
+                          <h5 className="text-xs font-medium text-gray-700 mb-2">Players on Court</h5>
+                          <div className="space-y-1">
+                            {Object.values(homeLineup).filter(player => player !== null).map((player) => (
+                              <button
+                                key={player!.id}
+                                onClick={() => setSelectedPlayer(player)}
+                                className={`w-full p-2 rounded border text-left text-xs transition-colors ${
+                                  selectedPlayer?.id === player!.id
+                                    ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
+                                    : 'bg-green-50 border-green-200 hover:bg-green-100'
+                                }`}
+                              >
+                                <div className="font-medium">#{player!.jersey_number} {player!.full_name}</div>
+                                <div className="text-xs text-gray-500">{player!.primary_position}</div>
+                              </button>
+                            ))}
+                          </div>
+                          {Object.values(homeLineup).filter(player => player !== null).length === 0 && (
+                            <div className="text-center text-gray-500 py-2 text-xs">
+                              No players in lineup. Drag players from bench to positions.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Away Team - Single Player Option */}
+                    {selectedTeam === 'away' && (
+                      <div>
+                        <button
+                          onClick={() => setSelectedPlayer(null)}
+                          className="w-full p-3 rounded-lg border text-center text-sm transition-colors bg-red-50 border-red-200 hover:bg-red-100"
+                        >
+                          <div className="font-medium flex items-center justify-center">
+                            <div
+                              className="w-3 h-3 rounded-full mr-2"
+                              style={{ backgroundColor: awayTeam?.team_color }}
+                            />
+                            {awayTeam?.name} Player
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">Generic opponent player</div>
+                        </button>
+                        <div className="mt-2 text-xs text-center text-gray-600 bg-gray-100 p-2 rounded">
+                          All plays for {awayTeam?.name} will be recorded as team plays
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No Team Selected */}
+                    {!selectedTeam && (
+                      <div className="text-center text-gray-500 py-8">
+                        <div className="text-sm mb-2">Select a team first</div>
+                        <div className="text-xs">Choose Home or Away team to see player options</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                  {/* Right Side: Play Selection */}
+                  <div className="col-span-7">
+
+                  {/* Team Selection */}
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-gray-700 mb-2">Team:</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTeam('home');
+                          // Keep player selection from court/bench
+                        }}
+                        className={`p-2 rounded text-xs border transition-colors ${
+                          selectedTeam === 'home'
+                            ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center">
+                          <div
+                            className="w-2 h-2 rounded-full mr-1"
+                            style={{ backgroundColor: homeTeam?.team_color }}
+                          />
+                          <span className="font-medium">{homeTeam?.name}</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTeam('away');
+                          // For away team, set a generic "their player" option
+                          setSelectedPlayer(null);
+                        }}
+                        className={`p-2 rounded text-xs border transition-colors ${
+                          selectedTeam === 'away'
+                            ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center">
+                          <div
+                            className="w-2 h-2 rounded-full mr-1"
+                            style={{ backgroundColor: awayTeam?.team_color }}
+                          />
+                          <span className="font-medium">{awayTeam?.name}</span>
+                        </div>
+                      </button>
+                    </div>
+                    {selectedTeam === 'away' && (
+                      <div className="mt-1 text-xs text-center text-gray-500 bg-gray-50 p-1 rounded">
+                        Recording for opponent team (generic player)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Play Type Selection */}
+                  <div className="mb-3 flex-1">
+                    <div className="text-xs font-medium text-gray-700 mb-2">Play Type:</div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {Object.entries(playTypes.reduce((acc, playType) => {
+                        if (!acc[playType.category]) {
+                          acc[playType.category] = [];
+                        }
+                        acc[playType.category].push(playType);
+                        return acc;
+                      }, {} as Record<string, PlayType[]>))
+                      .map(([category, categoryPlayTypes]) => (
+                        <div key={category}>
+                          <div className="text-xs font-semibold text-gray-800 uppercase tracking-wide mb-1 border-b border-gray-200 pb-1">
+                            {category}
+                          </div>
+                          <div className="grid grid-cols-1 gap-1 mb-1">
+                            {categoryPlayTypes.map((playType) => (
+                              <button
+                                key={playType.id}
+                                onClick={() => setSelectedPlayType(playType)}
+                                className={`p-2 rounded border text-left text-xs transition-all ${
+                                  selectedPlayType?.id === playType.id
+                                    ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200 shadow-sm'
+                                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                                }`}
+                              >
+                                <div className="font-medium">{playType.name}</div>
+                                <div className={`text-xs ${
+                                  playType.default_value > 0 ? 'text-green-600' :
+                                  playType.default_value < 0 ? 'text-red-600' : 'text-gray-500'
+                                }`}>
+                                  {playType.default_value > 0 && `+${playType.default_value}`}
+                                  {playType.default_value < 0 && `${playType.default_value}`}
+                                  {playType.default_value === 0 && '0'} pts
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Selection Status */}
+                  <div className="mb-2 p-2 bg-gray-50 rounded border">
+                    <div className="text-xs text-gray-600 mb-1">Current Selection:</div>
+                    <div className="text-xs">
+                      <div>Team: {selectedTeam ? (selectedTeam === 'home' ? homeTeam?.name : awayTeam?.name) : 'None'}</div>
+                      <div>Player: {selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'}</div>
+                      <div>Play: {selectedPlayType ? selectedPlayType.name : 'None'}</div>
+                    </div>
+                  </div>
+
+                  {/* Record Button Section */}
+                  <div className="mt-auto pt-2 border-t border-gray-200">
+                    {selectedTeam && selectedPlayType ? (
+                      <div>
+                        <div className="bg-blue-50 p-2 rounded mb-2">
+                          <div className="text-xs font-medium text-blue-800 mb-1">Ready to Record:</div>
+                          <div className="text-xs text-blue-700">
+                            <div>{selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'}</div>
+                            <div className="font-medium">{selectedPlayType.name}</div>
+                            {selectedPlayType.default_value !== 0 && (
+                              <div className={`text-xs ${selectedPlayType.default_value > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {selectedPlayType.default_value > 0 ? '+' : ''}{selectedPlayType.default_value} point{Math.abs(selectedPlayType.default_value) !== 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            if (isRecordingPlay) {
+                              // If already recording, just record without position
+                              recordPlay();
+                            } else {
+                              // Start recording mode
+                              setIsRecordingPlay(true);
+                              // Auto-record after 3 seconds if no court click
+                              setTimeout(() => {
+                                if (isRecordingPlay) {
+                                  recordPlay();
+                                  setIsRecordingPlay(false);
+                                }
+                              }, 3000);
+                            }
+                          }}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 text-sm"
+                        >
+                          {isRecordingPlay ? '🎯 RECORD NOW' : '▶️ RECORD PLAY'}
+                        </Button>
+                        {isRecordingPlay && (
+                          <div className="text-xs text-center text-gray-600 mt-1 p-1 bg-yellow-50 rounded">
+                            Click court for position or wait 3s for general play
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center p-3 bg-gray-50 rounded">
+                        <div className="text-xs text-gray-600 mb-1">Select team and play type to record</div>
+                        <div className="text-xs text-gray-500">
+                          1. Choose team → 2. Choose play type → 3. Record
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Right Side: Court for Ball Hit Location */}
+            <div className="col-span-5">
+              <Card className="p-4">
+                <h3 className="text-lg font-semibold mb-4 text-center">Court - Ball Hit Location</h3>
+
+                {/* Recording Warning - Outside Court */}
+                {isRecordingPlay && (
+                  <div className="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-blue-800 mb-1">🎯 Recording Mode Active</p>
+                      <div className="text-xs text-blue-700 mb-2">
+                        Recording: <span className="font-semibold">{selectedPlayType?.name}</span>
+                        {selectedPlayer && (
+                          <span> for {selectedPlayer.full_name} (#{selectedPlayer.jersey_number})</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-blue-600 mb-2">
+                        Click anywhere on the court below to record play location
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsRecordingPlay(false);
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+                      >
+                        Cancel Recording
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-center">
+                  <div
+                    className={`relative bg-orange-100 border-4 border-gray-800 rounded-lg ${
+                      isRecordingPlay ? 'cursor-crosshair' : ''
+                    }`}
+                    style={{
+                      width: '300px',
+                      height: '450px'
+                    }}
+                    onClick={handleFieldClick}
+                  >
+                    {/* Court outline */}
+                    <div className="absolute inset-2 border-2 border-white"></div>
+
+                    {/* Net (horizontal across middle) */}
+                    <div
+                      className="absolute bg-gray-800"
+                      style={{
+                        left: '0',
+                        top: '50%',
+                        width: '100%',
+                        height: '4px',
+                        transform: 'translateY(-50%)'
+                      }}
+                    />
+
+                    {/* 3m attack lines */}
+                    <div
+                      className="absolute bg-white"
+                      style={{
+                        left: '2px',
+                        top: '33.33%',
+                        width: 'calc(100% - 4px)',
+                        height: '2px'
+                      }}
+                    />
+                    <div
+                      className="absolute bg-white"
+                      style={{
+                        left: '2px',
+                        top: '66.67%',
+                        width: 'calc(100% - 4px)',
+                        height: '2px'
+                      }}
+                    />
+
+                    {/* Position labels for reference - Vertical Layout */}
+                    {/* Home team positions (bottom half) */}
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '85%', transform: 'translate(-50%, -50%)' }}>P1</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '85%', transform: 'translate(-50%, -50%)' }}>P6</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '85%', transform: 'translate(-50%, -50%)' }}>P5</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '60%', transform: 'translate(-50%, -50%)' }}>P2</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '60%', transform: 'translate(-50%, -50%)' }}>P3</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '60%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+                    {/* Away team positions (top half) */}
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '15%', transform: 'translate(-50%, -50%)' }}>P1</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '15%', transform: 'translate(-50%, -50%)' }}>P6</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '15%', transform: 'translate(-50%, -50%)' }}>P5</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '40%', transform: 'translate(-50%, -50%)' }}>P2</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '40%', transform: 'translate(-50%, -50%)' }}>P3</div>
+                    <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '40%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+                    {/* Team labels - Vertical Layout */}
+                    <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+                      {awayTeam?.name || 'Away'}
+                    </div>
+                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+                      {homeTeam?.name || 'Home'}
+                    </div>
+
+                    {/* Play markers */}
+                    {plays.map((play) => (
+                      play.field_x && play.field_y && (
+                        <div
+                          key={play.id}
+                          className="absolute w-4 h-4 rounded-full border-2 border-white shadow-lg z-10"
+                          style={{
+                            left: `${play.field_x}%`,
+                            top: `${play.field_y}%`,
+                            backgroundColor: play.play_type?.is_positive ? '#10b981' : '#ef4444',
+                            transform: 'translate(-50%, -50%)'
+                          }}
+                          title={`${play.player?.full_name || 'Team'} - ${play.play_type?.name}`}
+                        />
+                      )
+                    ))}
+
+                    {/* Visual indicator when recording - subtle overlay */}
+                    {isRecordingPlay && (
+                      <div className="absolute inset-0 bg-blue-500 bg-opacity-10 border-2 border-blue-400 rounded-lg z-20 pointer-events-none">
+                        <div className="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium">
+                          Recording...
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
       {/* Recent Plays with Edit/Delete */}
       {isRecording && currentSet && (
@@ -1911,7 +1790,7 @@ export default function GameRecordingPage() {
 
           {plays.length > 0 ? (
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {(showPlayHistory ? plays : plays.slice(-10)).reverse().map((play, index) => (
+              {(showPlayHistory ? plays : plays.slice(-10)).reverse().map((play) => (
                 <div key={play.id} className={`flex items-center justify-between p-3 rounded-lg border ${
                   editingPlay?.id === play.id ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
                 }`}>
@@ -2103,3 +1982,4 @@ export default function GameRecordingPage() {
     </div>
   );
 }
+

@@ -313,7 +313,15 @@ export default function GamesPage() {
 
   // Delete a game
   const deleteGame = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this game?')) {
+    // Find the game to get team names for confirmation
+    const gameToDelete = games.find(g => g.id === id);
+    const homeTeamName = gameToDelete ? getTeamName(gameToDelete.home_team_id) : 'Home Team';
+    const awayTeamName = gameToDelete ? getTeamName(gameToDelete.away_team_id) : 'Away Team';
+    const scheduledAt = gameToDelete?.scheduled_at ? new Date(gameToDelete.scheduled_at).toLocaleString() : 'Unknown time';
+
+    const confirmMessage = `Are you sure you want to delete this entire game?\n\nGame: ${homeTeamName} vs ${awayTeamName}\nScheduled: ${scheduledAt}\n\nThis will delete:\n- All sets\n- All plays\n- All game data\n\nThis action cannot be undone!`;
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -321,15 +329,43 @@ export default function GamesPage() {
     setError(null);
 
     try {
-      const { error: deleteError } = await supabase
+      console.log('Deleting game:', id);
+
+      // Delete in order: plays -> sets -> game
+      // First delete all plays for this game
+      const { error: playsError } = await supabase
+        .from('plays')
+        .delete()
+        .eq('game_id', id);
+
+      if (playsError) {
+        console.error('Error deleting plays:', playsError);
+        throw playsError;
+      }
+
+      // Then delete all sets for this game
+      const { error: setsError } = await supabase
+        .from('game_sets')
+        .delete()
+        .eq('game_id', id);
+
+      if (setsError) {
+        console.error('Error deleting sets:', setsError);
+        throw setsError;
+      }
+
+      // Finally delete the game
+      const { error: gameError } = await supabase
         .from('games')
         .delete()
         .eq('id', id);
 
-      if (deleteError) {
-        throw deleteError;
+      if (gameError) {
+        console.error('Error deleting game:', gameError);
+        throw gameError;
       }
 
+      console.log('Game deleted successfully');
       fetchGames();
     } catch (err: any) {
       console.error('Error deleting game:', err);
