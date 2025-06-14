@@ -52,18 +52,10 @@ interface NavItemProps {
 export function Navigation({ currentView, onViewChange, userRole = 'user' }: NavigationProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { signOut } = useAuth();
-  const pathname = usePathname();
 
-  // Filter navigation items based on user role
-  const filteredNavItems = navItems.filter(item => {
-    // If user is not a director, hide certain items
-    if (userRole !== 'director') {
-      if (['championships'].includes(item.id)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  // All users can access all navigation items
+  // Role-based permissions can be handled at the page level if needed
+  const filteredNavItems = navItems;
 
   function NavItem({ item }: NavItemProps) {
     const pathname = usePathname();

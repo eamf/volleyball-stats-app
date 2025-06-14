@@ -26,34 +26,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
 
     const getSession = async () => {
       try {
+        console.log('🔄 Initializing auth session...');
+
+        // Set a timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          if (mounted) {
+            console.warn('⚠️ Auth initialization timeout, setting loading to false');
+            setLoading(false);
+          }
+        }, 10000); // 10 second timeout
+
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (!mounted) return;
-        
+
         if (error) {
-          console.error('Session error:', error);
+          console.error('❌ Session error:', error);
+          clearTimeout(timeoutId);
           setLoading(false);
           return;
         }
-        
+
+        console.log('✅ Session loaded:', session?.user?.email || 'No user');
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           try {
             await fetchProfile(session.user.id);
           } catch (error) {
-            console.error('Profile fetch failed:', error);
-            if (mounted) setLoading(false);
+            console.error('❌ Profile fetch failed:', error);
+            if (mounted) {
+              clearTimeout(timeoutId);
+              setLoading(false);
+            }
           }
         } else {
+          clearTimeout(timeoutId);
           setLoading(false);
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
-        if (mounted) setLoading(false);
+        console.error('❌ Auth initialization error:', error);
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setLoading(false);
+        }
       }
     };
 
@@ -88,29 +108,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      console.log('🔄 Fetching profile for user:', userId);
+
+      // Add timeout for profile fetch
+      const profilePromise = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000);
+      });
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('No profile found for user:', userId);
+          console.log('ℹ️ No profile found for user:', userId);
           setProfile(null);
         } else {
-          console.error('Profile fetch error:', error);
+          console.error('❌ Profile fetch error:', error);
           setProfile(null);
         }
         setLoading(false);
         return;
       }
-      
-      console.log('Profile loaded:', data.full_name);
+
+      console.log('✅ Profile loaded:', data?.full_name || 'No name');
       setProfile(data);
       setLoading(false);
     } catch (error) {
-      console.error('Profile fetch error:', error);
+      console.error('❌ Profile fetch error:', error);
       setProfile(null);
       setLoading(false);
     }
