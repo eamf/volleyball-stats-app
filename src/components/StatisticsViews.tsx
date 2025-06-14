@@ -1,6 +1,6 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { Card } from '@/components/ui/Card';
 import { CourtHeatmap } from '@/components/CourtHeatmap';
 import { Trophy, Target, TrendingUp, TrendingDown, Activity, Users } from 'lucide-react';
 

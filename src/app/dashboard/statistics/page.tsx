@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { OverviewView, PlayersView, TeamsView, GamesView } from '@/components/StatisticsViews';
 import { BarChart3, Users, Trophy, Target, Filter, Download } from 'lucide-react';
 
@@ -302,6 +302,97 @@ export default function StatisticsPage() {
     };
   };
 
+  // Export functionality
+  const exportData = () => {
+    try {
+      // Filter plays based on current selections
+      let filteredPlays = plays;
+
+      if (selectedGame !== 'all') {
+        filteredPlays = filteredPlays.filter(p => p.game_id === selectedGame);
+      }
+
+      if (selectedTeam !== 'all') {
+        filteredPlays = filteredPlays.filter(p => p.team_id === selectedTeam);
+      }
+
+      if (selectedPlayer !== 'all') {
+        filteredPlays = filteredPlays.filter(p => p.player_id === selectedPlayer);
+      }
+
+      if (selectedCategory !== 'all') {
+        filteredPlays = filteredPlays.filter(p => p.play_type?.category === selectedCategory);
+      }
+
+      // Prepare data for export
+      const exportData = filteredPlays.map(play => ({
+        'Game': `${play.game?.home_team?.name} vs ${play.game?.away_team?.name}`,
+        'Date': new Date(play.game?.scheduled_at || '').toLocaleDateString(),
+        'Set': play.set_number,
+        'Team': play.team?.name || '',
+        'Player': play.player?.full_name || 'Team Play',
+        'Jersey Number': play.player?.jersey_number || '',
+        'Play Type': play.play_type?.name || '',
+        'Category': play.play_type?.category || '',
+        'Points': play.value,
+        'Position X': play.field_x || '',
+        'Position Y': play.field_y || '',
+        'Timestamp': new Date(play.timestamp_in_set).toLocaleString()
+      }));
+
+      // Convert to CSV
+      const headers = Object.keys(exportData[0] || {});
+      const csvContent = [
+        headers.join(','),
+        ...exportData.map(row =>
+          headers.map(header => {
+            const value = row[header as keyof typeof row];
+            // Escape commas and quotes in CSV
+            return typeof value === 'string' && value.includes(',')
+              ? `"${value.replace(/"/g, '""')}"`
+              : value;
+          }).join(',')
+        )
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+
+      // Generate filename with current filters
+      const filterParts = [];
+      if (selectedGame !== 'all') {
+        const game = games.find(g => g.id === selectedGame);
+        if (game) filterParts.push(`${game.home_team?.name}-vs-${game.away_team?.name}`);
+      }
+      if (selectedTeam !== 'all') {
+        const team = teams.find(t => t.id === selectedTeam);
+        if (team) filterParts.push(team.name);
+      }
+      if (selectedPlayer !== 'all') {
+        const player = players.find(p => p.id === selectedPlayer);
+        if (player) filterParts.push(`${player.full_name}-${player.jersey_number}`);
+      }
+      if (selectedCategory !== 'all') {
+        filterParts.push(selectedCategory);
+      }
+
+      const filename = `volleyball-stats${filterParts.length > 0 ? '-' + filterParts.join('-') : ''}-${new Date().toISOString().split('T')[0]}.csv`;
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log(`✅ Exported ${exportData.length} plays to ${filename}`);
+    } catch (err: any) {
+      console.error('❌ Export failed:', err);
+      setError(`Export failed: ${err.message}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
@@ -333,7 +424,7 @@ export default function StatisticsPage() {
           <p className="text-gray-600 mt-1">Comprehensive volleyball analytics and insights</p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="outline">
+          <Button variant="outline" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" />
             Export Data
           </Button>
@@ -358,7 +449,7 @@ export default function StatisticsPage() {
               <Button
                 key={key}
                 onClick={() => setSelectedView(key as any)}
-                variant={selectedView === key ? 'default' : 'outline'}
+                variant={selectedView === key ? 'primary' : 'outline'}
                 className="flex items-center"
               >
                 <Icon className="h-4 w-4 mr-2" />

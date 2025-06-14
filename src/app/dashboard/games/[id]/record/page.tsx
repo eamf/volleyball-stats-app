@@ -75,6 +75,8 @@ type GameSet = {
   away_score: number;
   is_completed: boolean;
   completed_at: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export default function GameRecordingPage() {
@@ -233,8 +235,8 @@ export default function GameRecordingPage() {
       
       if (teamsError) throw teamsError;
       
-      const homeTeamData = teamsData.find(t => t.id === gameData.home_team_id);
-      const awayTeamData = teamsData.find(t => t.id === gameData.away_team_id);
+      const homeTeamData = teamsData.find((t: any) => t.id === gameData.home_team_id);
+      const awayTeamData = teamsData.find((t: any) => t.id === gameData.away_team_id);
       
       setHomeTeam(homeTeamData || null);
       setAwayTeam(awayTeamData || null);
@@ -249,8 +251,8 @@ export default function GameRecordingPage() {
 
       if (playersError) throw playersError;
 
-      const homePlayersData = playersData?.filter(p => p.team_id === gameData.home_team_id) || [];
-      const awayPlayersData = playersData?.filter(p => p.team_id === gameData.away_team_id) || [];
+      const homePlayersData = playersData?.filter((p: any) => p.team_id === gameData.home_team_id) || [];
+      const awayPlayersData = playersData?.filter((p: any) => p.team_id === gameData.away_team_id) || [];
 
       setHomePlayers(homePlayersData);
       setAwayPlayers(awayPlayersData);
@@ -266,7 +268,7 @@ export default function GameRecordingPage() {
       setSets(setsData || []);
       
       // Find current set (first incomplete set)
-      const currentSetData = setsData?.find(s => !s.is_completed);
+      const currentSetData = setsData?.find((s: any) => !s.is_completed);
       setCurrentSet(currentSetData || null);
       
     } catch (err: any) {
@@ -322,9 +324,9 @@ export default function GameRecordingPage() {
         .from('games')
         .update({ status: 'in_progress' })
         .eq('id', gameId);
-      
+
       if (gameError) throw gameError;
-      
+
       // Create first set if none exists
       if (sets.length === 0) {
         const { data: setData, error: setError } = await supabase
@@ -338,22 +340,101 @@ export default function GameRecordingPage() {
           })
           .select()
           .single();
-        
+
         if (setError) throw setError;
-        
+
         setSets([setData]);
         setCurrentSet(setData);
       }
-      
+
       setIsRecording(true);
       if (game) {
         setGame({ ...game, status: 'in_progress' });
       }
-      
+
     } catch (err: any) {
       console.error('Error starting game:', err);
       setError(`Failed to start game: ${err.message}`);
     }
+  };
+
+  // Continue game recording (for games that are in_progress but have no current set)
+  const continueGame = async () => {
+    try {
+      console.log('🔄 Continuing game recording...');
+      console.log('Current sets:', sets.map(s => ({ set_number: s.set_number, is_completed: s.is_completed })));
+
+      // Check if there's an incomplete set
+      const incompleteSet = sets.find(s => !s.is_completed);
+
+      if (incompleteSet) {
+        console.log('✅ Found incomplete set:', incompleteSet.set_number);
+        setCurrentSet(incompleteSet);
+        setIsRecording(true);
+        return;
+      }
+
+      // Check if game should be completed (3 sets won by either team)
+      const completedSets = sets.filter(s => s.is_completed);
+      const homeSetsWon = completedSets.filter(s => s.home_score > s.away_score).length;
+      const awaySetsWon = completedSets.filter(s => s.away_score > s.home_score).length;
+
+      console.log('Sets won - Home:', homeSetsWon, 'Away:', awaySetsWon);
+
+      if (homeSetsWon >= 3 || awaySetsWon >= 3) {
+        console.log('🏆 Game should be completed');
+        await completeGame(homeSetsWon, awaySetsWon);
+        return;
+      }
+
+      // Create next set
+      const nextSetNumber = Math.max(...sets.map(s => s.set_number)) + 1;
+
+      if (nextSetNumber > 5) {
+        console.log('❌ Cannot create more than 5 sets');
+        setError('Maximum 5 sets reached. Game should be completed.');
+        return;
+      }
+
+      console.log('🆕 Creating set', nextSetNumber);
+
+      const { data: setData, error: insertSetError } = await supabase
+        .from('game_sets')
+        .insert({
+          game_id: gameId,
+          set_number: nextSetNumber,
+          home_score: 0,
+          away_score: 0,
+          is_completed: false
+        })
+        .select()
+        .single();
+
+      if (insertSetError) {
+        console.error('❌ Error creating set:', insertSetError);
+        throw insertSetError;
+      }
+
+      console.log('✅ Set created successfully:', setData);
+
+      setSets(prevSets => [...prevSets, setData]);
+      setCurrentSet(setData);
+      setIsRecording(true);
+
+    } catch (err: any) {
+      console.error('❌ Error continuing game:', err);
+      setError(`Failed to continue game: ${err.message}`);
+    }
+  };
+
+  // Pause game recording
+  const pauseGame = () => {
+    console.log('⏸️ Pausing game recording...');
+    setIsRecording(false);
+    setCurrentSet(null);
+    setSelectedPlayer(null);
+    setSelectedPlayType(null);
+    setSelectedTeam(null);
   };
   
   // Update set score
@@ -499,7 +580,7 @@ export default function GameRecordingPage() {
 
       console.log('✅ Set number', setNumber, 'is available, creating...');
 
-      const { data: setData, error: setError } = await supabase
+      const { data: setData, error: insertError } = await supabase
         .from('game_sets')
         .insert({
           game_id: gameId,
@@ -511,14 +592,14 @@ export default function GameRecordingPage() {
         .select()
         .single();
 
-      if (setError) {
-        console.error('❌ Error inserting new set:', setError);
-        if (setError.code === '23505') { // Unique constraint violation
+      if (insertError) {
+        console.error('❌ Error inserting new set:', insertError);
+        if (insertError.code === '23505') { // Unique constraint violation
           setError(`Set ${setNumber} already exists. Refreshing game data...`);
           await fetchGameData();
           return;
         }
-        throw setError;
+        throw insertError;
       }
 
       console.log('✅ New set created successfully:', setData);
@@ -811,7 +892,7 @@ export default function GameRecordingPage() {
   const deleteGame = async () => {
     if (!game) return;
 
-    const confirmMessage = `Are you sure you want to delete this entire game?\n\nGame: ${game.home_team?.name} vs ${game.away_team?.name}\nScheduled: ${new Date(game.scheduled_at).toLocaleString()}\n\nThis will delete:\n- All sets\n- All plays\n- All game data\n\nThis action cannot be undone!`;
+    const confirmMessage = `Are you sure you want to delete this entire game?\n\nGame: ${homeTeam?.name || 'Home Team'} vs ${awayTeam?.name || 'Away Team'}\nScheduled: ${new Date(game.scheduled_at).toLocaleString()}\n\nThis will delete:\n- All sets\n- All plays\n- All game data\n\nThis action cannot be undone!`;
 
     if (!confirm(confirmMessage)) {
       return;
@@ -1011,6 +1092,13 @@ export default function GameRecordingPage() {
             </Button>
           )}
 
+          {game.status === 'in_progress' && !currentSet && (
+            <Button onClick={continueGame} className="bg-green-600 hover:bg-green-700">
+              <Play className="h-4 w-4 mr-2" />
+              Continue Recording
+            </Button>
+          )}
+
           <Button
             onClick={deleteGame}
             variant="outline"
@@ -1050,6 +1138,37 @@ export default function GameRecordingPage() {
             </p>
             <p className="text-green-600 text-sm mt-1">
               Winner: {game.home_score > game.away_score ? homeTeam.name : awayTeam.name}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Game In Progress but Paused */}
+      {game.status === 'in_progress' && !currentSet && !isRecording && (
+        <Card className="p-6 mb-6 bg-yellow-50 border-yellow-200">
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-yellow-800 mb-2">🏐 Game Paused</h2>
+            <p className="text-yellow-700 mb-4">
+              This game is in progress but recording is paused. Click "Continue Recording" to resume.
+            </p>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-800">{sets.filter(s => s.is_completed).length}</div>
+                <div className="text-sm text-yellow-600">Sets Completed</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-800">
+                  {sets.filter(s => s.is_completed && s.home_score > s.away_score).length} - {sets.filter(s => s.is_completed && s.away_score > s.home_score).length}
+                </div>
+                <div className="text-sm text-yellow-600">Sets Won</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-800">{5 - sets.filter(s => s.is_completed).length}</div>
+                <div className="text-sm text-yellow-600">Sets Remaining</div>
+              </div>
+            </div>
+            <p className="text-xs text-yellow-600">
+              Last activity: {sets.length > 0 && sets[sets.length - 1].updated_at ? new Date(sets[sets.length - 1].updated_at!).toLocaleString() : 'Unknown'}
             </p>
           </div>
         </Card>
@@ -1141,6 +1260,14 @@ export default function GameRecordingPage() {
                 Complete Set Manually
               </Button>
               <Button
+                onClick={pauseGame}
+                variant="outline"
+                className="mr-3 text-yellow-600 border-yellow-300 hover:bg-yellow-50"
+              >
+                <Pause className="h-4 w-4 mr-2" />
+                Pause Recording
+              </Button>
+              <Button
                 onClick={() => completeGame(
                   sets.filter(s => s.is_completed && s.home_score > s.away_score).length,
                   sets.filter(s => s.is_completed && s.away_score > s.home_score).length
@@ -1157,19 +1284,13 @@ export default function GameRecordingPage() {
 
 
 
-      {/* Tablet-Optimized Real-Time Recording Interface */}
+      {/* Enhanced Real-Time Recording Interface */}
       {isRecording && currentSet && (
-        <div className="grid grid-cols-12 gap-4 mb-6">
-          {/* Left Side: Bench (Vertical) */}
-          <div className="col-span-2">
-            <Card className="p-3 h-full">
-              <h3 className="text-sm font-semibold mb-3 text-center">
-                <div
-                  className="w-3 h-3 rounded-full mx-auto mb-1"
-                  style={{ backgroundColor: homeTeam?.team_color }}
-                />
-                Bench
-              </h3>
+        <div className="grid grid-cols-12 gap-6 mb-6">
+          {/* Left Side: Enhanced Play Selection */}
+          <div className="col-span-5">
+            <Card className="p-4" style={{ height: '600px' }}>
+              <h3 className="text-lg font-semibold mb-4">Record Play</h3>
               <div className="space-y-2">
                 {getAvailablePlayers('home').map((player) => (
                   <div
@@ -1262,34 +1383,7 @@ export default function GameRecordingPage() {
                 )}
               </div>
 
-              {/* Quick lineup management */}
-              <div className="mt-3">
-                <div className="text-xs text-gray-600 mb-1">Quick Lineup (drag from bench to positions):</div>
-                <div className="grid grid-cols-6 gap-1">
-                  {[
-                    { pos: 'P5', label: 'P5' },
-                    { pos: 'P6', label: 'P6' },
-                    { pos: 'P1', label: 'P1' },
-                    { pos: 'P4', label: 'P4' },
-                    { pos: 'P3', label: 'P3' },
-                    { pos: 'P2', label: 'P2' }
-                  ].map(({ pos, label }) => (
-                    <div
-                      key={pos}
-                      className="h-8 border border-dashed border-gray-300 rounded flex items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100 transition-all text-center"
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(pos, 'home')}
-                      onClick={() => homeLineup[pos] && removePlayerFromCourt(pos, 'home')}
-                    >
-                      {homeLineup[pos] ? (
-                        <div className="text-xs font-bold">#{homeLineup[pos]!.jersey_number}</div>
-                      ) : (
-                        <div className="text-xs text-gray-400">{label}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+
             </Card>
           </div>
 
@@ -1299,39 +1393,39 @@ export default function GameRecordingPage() {
               <h3 className="text-sm font-semibold mb-3">Record Play</h3>
 
               {/* Team Selection */}
-              <div className="mb-3">
-                <div className="text-xs text-gray-600 mb-1">Team:</div>
-                <div className="grid grid-cols-2 gap-1">
+              <div className="mb-4">
+                <div className="text-sm font-medium text-gray-700 mb-2">Team:</div>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setSelectedTeam('home')}
-                    className={`p-2 rounded text-xs border transition-colors ${
+                    className={`p-3 rounded-lg text-sm border transition-colors ${
                       selectedTeam === 'home'
-                        ? 'bg-blue-100 border-blue-300'
+                        ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
                     <div className="flex items-center justify-center">
                       <div
-                        className="w-2 h-2 rounded-full mr-1"
+                        className="w-3 h-3 rounded-full mr-2"
                         style={{ backgroundColor: homeTeam?.team_color }}
                       />
-                      <span className="truncate">{homeTeam?.name}</span>
+                      <span className="font-medium">{homeTeam?.name}</span>
                     </div>
                   </button>
                   <button
                     onClick={() => setSelectedTeam('away')}
-                    className={`p-2 rounded text-xs border transition-colors ${
+                    className={`p-3 rounded-lg text-sm border transition-colors ${
                       selectedTeam === 'away'
-                        ? 'bg-blue-100 border-blue-300'
+                        ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
                     <div className="flex items-center justify-center">
                       <div
-                        className="w-2 h-2 rounded-full mr-1"
+                        className="w-3 h-3 rounded-full mr-2"
                         style={{ backgroundColor: awayTeam?.team_color }}
                       />
-                      <span className="truncate">{awayTeam?.name}</span>
+                      <span className="font-medium">{awayTeam?.name}</span>
                     </div>
                   </button>
                 </div>
@@ -1339,18 +1433,19 @@ export default function GameRecordingPage() {
 
               {/* Player Selection */}
               {selectedTeam && (
-                <div className="mb-3">
-                  <div className="text-xs text-gray-600 mb-1">Player:</div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                <div className="mb-4">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Player:</div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
                     <button
                       onClick={() => setSelectedPlayer(null)}
-                      className={`w-full p-2 rounded border text-left text-xs transition-colors ${
+                      className={`w-full p-3 rounded-lg border text-left text-sm transition-colors ${
                         selectedPlayer === null
-                          ? 'bg-blue-100 border-blue-300'
+                          ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
                           : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                       }`}
                     >
-                      Team Play (no specific player)
+                      <div className="font-medium">Team Play</div>
+                      <div className="text-xs text-gray-500">No specific player</div>
                     </button>
 
                     {selectedTeam === 'home' ? (
@@ -1400,9 +1495,9 @@ export default function GameRecordingPage() {
               )}
 
               {/* Play Type Selection */}
-              <div className="mb-3">
-                <div className="text-xs text-gray-600 mb-1">Play Type:</div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+              <div className="mb-4 flex-1">
+                <div className="text-sm font-medium text-gray-700 mb-2">Play Type:</div>
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                   {Object.entries(playTypes.reduce((acc, playType) => {
                     if (!acc[playType.category]) {
                       acc[playType.category] = [];
@@ -1412,22 +1507,25 @@ export default function GameRecordingPage() {
                   }, {} as Record<string, PlayType[]>))
                   .map(([category, categoryPlayTypes]) => (
                     <div key={category}>
-                      <div className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-1">
+                      <div className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-2 border-b border-gray-200 pb-1">
                         {category}
                       </div>
-                      <div className="grid grid-cols-1 gap-1">
+                      <div className="grid grid-cols-1 gap-2 mb-2">
                         {categoryPlayTypes.map((playType) => (
                           <button
                             key={playType.id}
                             onClick={() => setSelectedPlayType(playType)}
-                            className={`p-2 rounded border text-left text-xs transition-colors ${
+                            className={`p-3 rounded-lg border text-left text-sm transition-all ${
                               selectedPlayType?.id === playType.id
-                                ? 'bg-blue-100 border-blue-300'
-                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200 shadow-sm'
+                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                             }`}
                           >
-                            <div className="font-medium">{playType.name}</div>
-                            <div className="text-gray-600">
+                            <div className="font-semibold">{playType.name}</div>
+                            <div className={`text-xs ${
+                              playType.default_value > 0 ? 'text-green-600' :
+                              playType.default_value < 0 ? 'text-red-600' : 'text-gray-500'
+                            }`}>
                               {playType.default_value > 0 && `+${playType.default_value}`}
                               {playType.default_value < 0 && `${playType.default_value}`}
                               {playType.default_value === 0 && '0'} pts
@@ -1450,45 +1548,58 @@ export default function GameRecordingPage() {
                 </div>
               </div>
 
-              {/* Single Record Button */}
-              {selectedTeam && selectedPlayType && (
-                <div className="mt-4">
-                  <div className="text-xs text-gray-600 mb-2">
-                    Ready to record: {selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'} - {selectedPlayType.name}
-                    {selectedPlayType.default_value !== 0 && (
-                      <span className={selectedPlayType.default_value > 0 ? 'text-green-600' : 'text-red-600'}>
-                        {' '}({selectedPlayType.default_value > 0 ? '+' : ''}{selectedPlayType.default_value} pt)
-                      </span>
+              {/* Record Button Section */}
+              <div className="mt-auto pt-4 border-t border-gray-200">
+                {selectedTeam && selectedPlayType ? (
+                  <div>
+                    <div className="bg-blue-50 p-3 rounded-lg mb-3">
+                      <div className="text-sm font-medium text-blue-800 mb-1">Ready to Record:</div>
+                      <div className="text-sm text-blue-700">
+                        <div>{selectedPlayer ? `${selectedPlayer.full_name} (#${selectedPlayer.jersey_number})` : 'Team play'}</div>
+                        <div className="font-semibold">{selectedPlayType.name}</div>
+                        {selectedPlayType.default_value !== 0 && (
+                          <div className={`text-sm ${selectedPlayType.default_value > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {selectedPlayType.default_value > 0 ? '+' : ''}{selectedPlayType.default_value} point{Math.abs(selectedPlayType.default_value) !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        if (isRecordingPlay) {
+                          // If already recording, just record without position
+                          recordPlay();
+                        } else {
+                          // Start recording mode
+                          setIsRecordingPlay(true);
+                          // Auto-record after 3 seconds if no court click
+                          setTimeout(() => {
+                            if (isRecordingPlay) {
+                              recordPlay();
+                              setIsRecordingPlay(false);
+                            }
+                          }, 3000);
+                        }
+                      }}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 text-lg"
+                    >
+                      {isRecordingPlay ? '🎯 RECORD NOW' : '▶️ RECORD PLAY'}
+                    </Button>
+                    {isRecordingPlay && (
+                      <div className="text-sm text-center text-gray-600 mt-2 p-2 bg-yellow-50 rounded">
+                        Click court for position or wait 3s for general play
+                      </div>
                     )}
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (isRecordingPlay) {
-                        // If already recording, just record without position
-                        recordPlay();
-                      } else {
-                        // Start recording mode
-                        setIsRecordingPlay(true);
-                        // Auto-record after 3 seconds if no court click
-                        setTimeout(() => {
-                          if (isRecordingPlay) {
-                            recordPlay();
-                            setIsRecordingPlay(false);
-                          }
-                        }, 3000);
-                      }
-                    }}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3"
-                  >
-                    {isRecordingPlay ? 'RECORD NOW (or click court)' : 'RECORD PLAY'}
-                  </Button>
-                  {isRecordingPlay && (
-                    <div className="text-xs text-center text-gray-500 mt-1">
-                      Click court for position or wait 3s for no position
+                ) : (
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-2">Select team and play type to record</div>
+                    <div className="text-xs text-gray-500">
+                      1. Choose team → 2. Choose play type → 3. Record
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
 
               {/* Instructions */}
               {(!selectedTeam || !selectedPlayType) && (
@@ -1504,156 +1615,280 @@ export default function GameRecordingPage() {
               )}
             </Card>
           </div>
+
+          {/* Right Side: Complete Court for Ball-Hit Location */}
+          <div className="col-span-7">
+            <Card className="p-4">
+              <h3 className="text-lg font-semibold mb-4 text-center">Court - Ball Hit Location</h3>
+
+              <div className="flex justify-center">
+                <div
+                  className={`relative bg-orange-100 border-4 border-gray-800 rounded-lg ${
+                    isRecordingPlay ? 'cursor-crosshair' : ''
+                  }`}
+                  style={{
+                    width: '400px',
+                    height: '600px'
+                  }}
+                  onClick={handleFieldClick}
+                >
+                  {/* Court outline */}
+                  <div className="absolute inset-2 border-2 border-white"></div>
+
+                  {/* Net (horizontal across middle) */}
+                  <div
+                    className="absolute bg-gray-800"
+                    style={{
+                      left: '0',
+                      top: '50%',
+                      width: '100%',
+                      height: '4px',
+                      transform: 'translateY(-50%)'
+                    }}
+                  />
+
+                  {/* 3m attack lines */}
+                  <div
+                    className="absolute bg-white"
+                    style={{
+                      left: '2px',
+                      top: '33.33%',
+                      width: 'calc(100% - 4px)',
+                      height: '2px'
+                    }}
+                  />
+                  <div
+                    className="absolute bg-white"
+                    style={{
+                      left: '2px',
+                      top: '66.67%',
+                      width: 'calc(100% - 4px)',
+                      height: '2px'
+                    }}
+                  />
+
+                  {/* Position labels for reference - Vertical Layout */}
+                  {/* Home team positions (bottom half) */}
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '85%', transform: 'translate(-50%, -50%)' }}>P1</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '85%', transform: 'translate(-50%, -50%)' }}>P6</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '85%', transform: 'translate(-50%, -50%)' }}>P5</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '60%', transform: 'translate(-50%, -50%)' }}>P2</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '60%', transform: 'translate(-50%, -50%)' }}>P3</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '60%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+                  {/* Away team positions (top half) */}
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '15%', transform: 'translate(-50%, -50%)' }}>P1</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '15%', transform: 'translate(-50%, -50%)' }}>P6</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '15%', transform: 'translate(-50%, -50%)' }}>P5</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '40%', transform: 'translate(-50%, -50%)' }}>P2</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '40%', transform: 'translate(-50%, -50%)' }}>P3</div>
+                  <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '40%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+                  {/* Team labels - Vertical Layout */}
+                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+                    {awayTeam?.name || 'Away'}
+                  </div>
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+                    {homeTeam?.name || 'Home'}
+                  </div>
+
+                  {/* Play markers */}
+                  {plays.map((play, index) => (
+                    play.field_x && play.field_y && (
+                      <div
+                        key={index}
+                        className="absolute w-4 h-4 rounded-full border-2 border-white shadow-lg z-10"
+                        style={{
+                          left: `${play.field_x}%`,
+                          top: `${play.field_y}%`,
+                          backgroundColor: play.play_type?.is_positive ? '#10b981' : '#ef4444',
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                        title={`${play.player?.full_name || 'Team'} - ${play.play_type?.name}`}
+                      />
+                    )
+                  ))}
+
+                  {isRecordingPlay && (
+                    <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center z-20">
+                      <div className="bg-white px-6 py-4 rounded-lg shadow-xl border-2 border-blue-300">
+                        <p className="text-sm font-medium text-gray-800 mb-2">Click anywhere on the court to record play</p>
+                        <div className="text-xs text-gray-600 mb-3">
+                          Recording: <span className="font-semibold">{selectedPlayType?.name}</span>
+                          {selectedPlayer && (
+                            <span> for {selectedPlayer.full_name} (#{selectedPlayer.jersey_number})</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsRecordingPlay(false);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Cancel Recording
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
 
-      {/* Simplified Volleyball Court for Play Recording - Vertical Layout */}
+      {/* Compact Lineup Management */}
       {isRecording && currentSet && (
-        <Card className="p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">Volleyball Court - Play Recording</h3>
-          <div className="flex justify-center">
-            <div
-              className={`relative bg-orange-100 border-4 border-gray-800 rounded-lg ${
-                isRecordingPlay ? 'cursor-crosshair' : ''
-              }`}
-              style={{
-                width: '400px',
-                height: '600px'
-              }}
-              onClick={handleFieldClick}
-            >
-              {/* Court outline */}
-              <div className="absolute inset-2 border-2 border-white"></div>
+        <Card className="p-4 mb-6">
+          <h3 className="text-lg font-semibold mb-4">Lineup & Bench</h3>
 
-              {/* Net (horizontal across middle) */}
-              <div
-                className="absolute bg-gray-800"
-                style={{
-                  left: '0',
-                  top: '50%',
-                  width: '100%',
-                  height: '4px',
-                  transform: 'translateY(-50%)'
-                }}
-              />
-
-              {/* 3m attack lines */}
-              <div
-                className="absolute bg-white"
-                style={{
-                  left: '2px',
-                  top: '33.33%',
-                  width: 'calc(100% - 4px)',
-                  height: '2px'
-                }}
-              />
-              <div
-                className="absolute bg-white"
-                style={{
-                  left: '2px',
-                  top: '66.67%',
-                  width: 'calc(100% - 4px)',
-                  height: '2px'
-                }}
-              />
-
-              {/* Position labels for reference - Vertical Layout */}
-              {/* Home team positions (bottom half) */}
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '85%', transform: 'translate(-50%, -50%)' }}>P1</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '85%', transform: 'translate(-50%, -50%)' }}>P6</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '85%', transform: 'translate(-50%, -50%)' }}>P5</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '60%', transform: 'translate(-50%, -50%)' }}>P2</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '60%', transform: 'translate(-50%, -50%)' }}>P3</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '60%', transform: 'translate(-50%, -50%)' }}>P4</div>
-
-              {/* Away team positions (top half) */}
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '15%', transform: 'translate(-50%, -50%)' }}>P1</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '15%', transform: 'translate(-50%, -50%)' }}>P6</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '15%', transform: 'translate(-50%, -50%)' }}>P5</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '40%', transform: 'translate(-50%, -50%)' }}>P2</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '40%', transform: 'translate(-50%, -50%)' }}>P3</div>
-              <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '40%', transform: 'translate(-50%, -50%)' }}>P4</div>
-
-              {/* Team labels - Vertical Layout */}
-              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
-                {awayTeam?.name || 'Away'}
-              </div>
-              <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
-                {homeTeam?.name || 'Home'}
-              </div>
-
-              {/* Play markers */}
-              {plays.map((play, index) => (
-                play.field_x && play.field_y && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Home Team */}
+            <div>
+              {/* Team Name at Top */}
+              <div className="text-center mb-3">
+                <h4 className="text-md font-semibold flex items-center justify-center">
                   <div
-                    key={index}
-                    className="absolute w-4 h-4 rounded-full border-2 border-white shadow-lg z-10"
-                    style={{
-                      left: `${play.field_x}%`,
-                      top: `${play.field_y}%`,
-                      backgroundColor: play.play_type?.is_positive ? '#10b981' : '#ef4444',
-                      transform: 'translate(-50%, -50%)'
-                    }}
-                    title={`${play.player?.full_name || 'Team'} - ${play.play_type?.name}`}
+                    className="w-4 h-4 rounded-full mr-2"
+                    style={{ backgroundColor: homeTeam?.team_color }}
                   />
-                )
-              ))}
+                  {homeTeam?.name}
+                </h4>
+              </div>
 
-              {isRecordingPlay && (
-                <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center z-20">
-                  <div className="bg-white px-6 py-4 rounded-lg shadow-xl border-2 border-blue-300">
-                    <p className="text-sm font-medium text-gray-800 mb-2">Click anywhere on the court to record play</p>
-                    <div className="text-xs text-gray-600 mb-3">
-                      Recording: <span className="font-semibold">{selectedPlayType?.name}</span>
-                      {selectedPlayer && (
-                        <span> for {selectedPlayer.full_name} (#{selectedPlayer.jersey_number})</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsRecordingPlay(false);
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Cancel Recording
-                    </button>
+              {/* Compact Position Boxes */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[
+                  { pos: 'P4', label: 'P4' },
+                  { pos: 'P3', label: 'P3' },
+                  { pos: 'P2', label: 'P2' },
+                  { pos: 'P5', label: 'P5' },
+                  { pos: 'P6', label: 'P6' },
+                  { pos: 'P1', label: 'P1' }
+                ].map(({ pos, label }) => (
+                  <div
+                    key={pos}
+                    className="border-2 border-dashed border-gray-300 rounded p-2 text-center min-h-[60px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(pos, 'home')}
+                  >
+                    <div className="text-xs font-medium text-gray-600 mb-1">{label}</div>
+                    {homeLineup[pos] ? (
+                      <div
+                        className="bg-blue-100 border border-blue-300 rounded px-1 py-0.5 cursor-pointer hover:bg-blue-200 text-xs"
+                        onClick={() => removePlayerFromCourt(pos, 'home')}
+                      >
+                        <div className="font-bold">#{homeLineup[pos]!.jersey_number}</div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-400 text-xs">-</div>
+                    )}
                   </div>
+                ))}
+              </div>
+
+              {/* Compact Bench */}
+              <div>
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Bench</h5>
+                <div className="grid grid-cols-6 gap-1">
+                  {getAvailablePlayers('home').map((player) => (
+                    <div
+                      key={player.id}
+                      draggable
+                      onDragStart={() => handleDragStart(player, 'home')}
+                      onClick={() => setSelectedPlayer(player)}
+                      className={`p-1 rounded text-center text-xs border transition-colors cursor-move ${
+                        selectedPlayer?.id === player.id
+                          ? 'bg-blue-100 border-blue-300'
+                          : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}
+                      title={player.full_name}
+                    >
+                      <div className="font-bold text-xs">#{player.jersey_number}</div>
+                      <div className="text-xs truncate" style={{ fontSize: '10px' }}>
+                        {player.full_name.split(' ')[0].substring(0, 4)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
+            </div>
+
+            {/* Away Team */}
+            <div>
+              {/* Team Name at Top */}
+              <div className="text-center mb-3">
+                <h4 className="text-md font-semibold flex items-center justify-center">
+                  <div
+                    className="w-4 h-4 rounded-full mr-2"
+                    style={{ backgroundColor: awayTeam?.team_color }}
+                  />
+                  {awayTeam?.name}
+                </h4>
+              </div>
+
+              {/* Compact Position Boxes */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[
+                  { pos: 'P4', label: 'P4' },
+                  { pos: 'P3', label: 'P3' },
+                  { pos: 'P2', label: 'P2' },
+                  { pos: 'P5', label: 'P5' },
+                  { pos: 'P6', label: 'P6' },
+                  { pos: 'P1', label: 'P1' }
+                ].map(({ pos, label }) => (
+                  <div
+                    key={pos}
+                    className="border-2 border-dashed border-gray-300 rounded p-2 text-center min-h-[60px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(pos, 'away')}
+                  >
+                    <div className="text-xs font-medium text-gray-600 mb-1">{label}</div>
+                    {awayLineup[pos] ? (
+                      <div
+                        className="bg-red-100 border border-red-300 rounded px-1 py-0.5 cursor-pointer hover:bg-red-200 text-xs"
+                        onClick={() => removePlayerFromCourt(pos, 'away')}
+                      >
+                        <div className="font-bold">#{awayLineup[pos]!.jersey_number}</div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-400 text-xs">-</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Compact Bench */}
+              <div>
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Bench</h5>
+                <div className="grid grid-cols-6 gap-1">
+                  {getAvailablePlayers('away').map((player) => (
+                    <div
+                      key={player.id}
+                      draggable
+                      onDragStart={() => handleDragStart(player, 'away')}
+                      onClick={() => setSelectedPlayer(player)}
+                      className={`p-1 rounded text-center text-xs border transition-colors cursor-move ${
+                        selectedPlayer?.id === player.id
+                          ? 'bg-blue-100 border-blue-300'
+                          : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}
+                      title={player.full_name}
+                    >
+                      <div className="font-bold text-xs">#{player.jersey_number}</div>
+                      <div className="text-xs truncate" style={{ fontSize: '10px' }}>
+                        {player.full_name.split(' ')[0].substring(0, 4)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Court legend */}
-          <div className="mt-4 flex justify-center">
-            <div className="bg-gray-50 p-4 rounded-lg border">
-              <div className="text-xs text-gray-600 space-y-2">
-                <div className="flex items-center justify-center space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <span>Positive plays</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <span>Negative plays</span>
-                  </div>
-                </div>
-                <div className="text-center text-gray-500 border-t pt-2">
-                  <div className="font-medium mb-1">Volleyball Positions:</div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>P1: Right Back (Server)</div>
-                    <div>P2: Right Front</div>
-                    <div>P3: Middle Front</div>
-                    <div>P4: Left Front</div>
-                    <div>P5: Left Back</div>
-                    <div>P6: Middle Back</div>
-                  </div>
-                  <div className="mt-2 text-gray-400">
-                    Drag players from bench to court positions | Click positions to remove players
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="mt-3 text-center text-xs text-gray-600">
+            Drag players from bench to positions | Click positioned players to remove
           </div>
         </Card>
       )}
@@ -1786,10 +2021,27 @@ export default function GameRecordingPage() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                  {set.is_completed && (
+                  {set.is_completed ? (
                     <span className="text-sm font-medium text-gray-600">
                       Winner: {set.home_score > set.away_score ? homeTeam.name : awayTeam.name}
                     </span>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-blue-600">In Progress</span>
+                      {game.status === 'in_progress' && !isRecording && (
+                        <Button
+                          onClick={() => {
+                            setCurrentSet(set);
+                            setIsRecording(true);
+                          }}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Continue
+                        </Button>
+                      )}
+                    </div>
                   )}
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                     set.is_completed ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
@@ -1800,6 +2052,52 @@ export default function GameRecordingPage() {
               </div>
             ))}
           </div>
+
+          {/* Start Next Set Button */}
+          {game.status === 'in_progress' && !currentSet && !isRecording && sets.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="text-center">
+                {(() => {
+                  const completedSets = sets.filter(s => s.is_completed);
+                  const homeSetsWon = completedSets.filter(s => s.home_score > s.away_score).length;
+                  const awaySetsWon = completedSets.filter(s => s.away_score > s.home_score).length;
+                  const nextSetNumber = Math.max(...sets.map(s => s.set_number)) + 1;
+
+                  if (homeSetsWon >= 3 || awaySetsWon >= 3) {
+                    return (
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600 mb-3">
+                          Game should be completed ({homeSetsWon >= 3 ? homeTeam.name : awayTeam.name} won 3 sets)
+                        </p>
+                        <Button
+                          onClick={() => completeGame(homeSetsWon, awaySetsWon)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Complete Game
+                        </Button>
+                      </div>
+                    );
+                  } else if (nextSetNumber <= 5) {
+                    return (
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600 mb-3">
+                          Ready to start Set {nextSetNumber}
+                        </p>
+                        <Button
+                          onClick={continueGame}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Start Set {nextSetNumber}
+                        </Button>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>

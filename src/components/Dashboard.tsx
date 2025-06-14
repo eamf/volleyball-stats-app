@@ -15,7 +15,6 @@ import { Profile } from '@/components/profile/Profile';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { signOut } from '@/utils/auth';
 import { createClient } from '@/lib/supabase';
 
 export type DashboardView = 
@@ -33,6 +32,10 @@ export function Dashboard() {
   const [currentView, setCurrentView] = useState<DashboardView>('overview');
   const { user, profile, loading } = useAuth();
   const supabase = createClient();
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
   
   // Add state for data
   const [clubs, setClubs] = useState<any[]>([]);
@@ -179,10 +182,9 @@ export function Dashboard() {
           supabase={supabase} 
         />;
       case 'championships':
-        return <ChampionshipsManagement 
+        return <ChampionshipsManagement
           championships={championships}
           onRefresh={fetchChampionships}
-          supabase={supabase}
         />;
       case 'teams':
         return <TeamsManagement 
@@ -193,35 +195,13 @@ export function Dashboard() {
           supabase={supabase}
         />;
       case 'players':
-        return <PlayersManagement 
-          players={players}
-          teams={teams}
-          onRefresh={fetchPlayers}
-          supabase={supabase}
-        />;
+        return <div className="p-6">Players management coming soon...</div>;
       case 'games':
-        return <GamesManagement 
-          games={games}
-          teams={teams}
-          championships={championships}
-          onRefresh={fetchGames}
-          onStartRecording={() => setCurrentView('game-recording')}
-          supabase={supabase}
-        />;
+        return <div className="p-6">Games management coming soon...</div>;
       case 'game-recording':
-        return <GameRecording 
-          games={games}
-          onFinish={() => setCurrentView('games')}
-          supabase={supabase}
-        />;
+        return <div className="p-6">Game recording coming soon...</div>;
       case 'statistics':
-        return <Statistics 
-          statistics={statistics}
-          clubs={clubs}
-          teams={teams}
-          games={games}
-          players={players}
-        />;
+        return <div className="p-6">Statistics coming soon...</div>;
       case 'profile':
         return <Profile 
           user={user}
@@ -230,20 +210,18 @@ export function Dashboard() {
           supabase={supabase}
         />;
       default:
-        return <DashboardOverview 
-          user={user} 
-          userProfile={profile}
-          statistics={statistics}
-          onNavigate={setCurrentView}
-        />;
+        return <div className="p-6">
+          <h2 className="text-2xl font-bold mb-4">Welcome to Volleyball Stats</h2>
+          <p>Select a section from the navigation to get started.</p>
+        </div>;
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation 
-        currentView={currentView} 
-        onViewChange={setCurrentView}
+      <Navigation
+        currentView={currentView}
+        onViewChange={(view: string) => setCurrentView(view as DashboardView)}
         userRole={profile?.role}
       />
       

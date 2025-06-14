@@ -30,4 +30,4 @@ export function createClient() {
 }
 
 // Database type definitions for Supabase
-export type { Database };
+// export type { Database }; // Commented out until types are generated
