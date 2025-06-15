@@ -538,6 +538,7 @@ export default function StatisticsPage() {
           })}
           topPlayers={playerStats}
           topTeams={teamStats}
+          playTypes={playTypes}
         />
       )}
 

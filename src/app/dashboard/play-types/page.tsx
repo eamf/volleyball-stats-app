@@ -171,7 +171,23 @@ export default function PlayTypesPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Play Types Management</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Play Types Management</h1>
+          <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-green-500 mr-1"></div>
+              <span>Positive plays</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-red-500 mr-1"></div>
+              <span>Negative plays</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-gray-400 mr-1"></div>
+              <span>Neutral plays</span>
+            </div>
+          </div>
+        </div>
         <Button
           onClick={() => setShowForm(true)}
           className="bg-blue-600 hover:bg-blue-700"
@@ -346,10 +362,25 @@ export default function PlayTypesPage() {
               {categoryPlayTypes.map((playType) => (
                 <div
                   key={playType.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
+                    playType.default_value > 0
+                      ? 'border-green-200 bg-green-50'
+                      : playType.default_value < 0
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-gray-200 bg-gray-50'
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">{playType.name}</h4>
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full mr-2 ${
+                        playType.default_value > 0
+                          ? 'bg-green-500'
+                          : playType.default_value < 0
+                            ? 'bg-red-500'
+                            : 'bg-gray-400'
+                      }`}></div>
+                      <h4 className="font-medium text-gray-900">{playType.name}</h4>
+                    </div>
                     <div className="flex space-x-1">
                       <Button
                         onClick={() => handleEdit(playType)}

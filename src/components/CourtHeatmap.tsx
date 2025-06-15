@@ -124,12 +124,6 @@ export function CourtHeatmap({
     }
   };
 
-  // Court dimensions (volleyball court is 18m x 9m)
-  const courtWidth = width * 0.8;
-  const courtHeight = height * 0.7;
-  const courtX = (width - courtWidth) / 2;
-  const courtY = (height - courtHeight) / 2;
-
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-4">
@@ -138,94 +132,99 @@ export function CourtHeatmap({
           {plays.filter(p => p.field_x !== null && p.field_y !== null).length} positioned plays
         </div>
       </div>
-      
+
       <div className="flex flex-col items-center">
-        <svg width={width} height={height} className="border border-gray-300 rounded">
-          {/* Court background */}
-          <rect
-            x={courtX}
-            y={courtY}
-            width={courtWidth}
-            height={courtHeight}
-            fill="#f8fafc"
-            stroke="#e2e8f0"
-            strokeWidth="2"
+        <div
+          className="relative bg-orange-100 border-4 border-gray-800 rounded-lg"
+          style={{
+            width: `${width}px`,
+            height: `${height}px`
+          }}
+        >
+          {/* Court outline */}
+          <div className="absolute inset-2 border-2 border-white"></div>
+
+          {/* Net (horizontal across middle) */}
+          <div
+            className="absolute bg-gray-800"
+            style={{
+              left: '0',
+              top: '50%',
+              width: '100%',
+              height: '4px',
+              transform: 'translateY(-50%)'
+            }}
           />
-          
-          {/* Court lines */}
-          {/* Center line */}
-          <line
-            x1={courtX}
-            y1={courtY + courtHeight / 2}
-            x2={courtX + courtWidth}
-            y2={courtY + courtHeight / 2}
-            stroke="#64748b"
-            strokeWidth="2"
+
+          {/* 3m attack lines */}
+          <div
+            className="absolute bg-white"
+            style={{
+              left: '2px',
+              top: '33.33%',
+              width: 'calc(100% - 4px)',
+              height: '2px'
+            }}
           />
-          
-          {/* Attack lines (3m lines) */}
-          <line
-            x1={courtX}
-            y1={courtY + courtHeight * 0.2}
-            x2={courtX + courtWidth}
-            y2={courtY + courtHeight * 0.2}
-            stroke="#94a3b8"
-            strokeWidth="1"
-            strokeDasharray="5,5"
+          <div
+            className="absolute bg-white"
+            style={{
+              left: '2px',
+              top: '66.67%',
+              width: 'calc(100% - 4px)',
+              height: '2px'
+            }}
           />
-          <line
-            x1={courtX}
-            y1={courtY + courtHeight * 0.8}
-            x2={courtX + courtWidth}
-            y2={courtY + courtHeight * 0.8}
-            stroke="#94a3b8"
-            strokeWidth="1"
-            strokeDasharray="5,5"
-          />
-          
-          {/* Net */}
-          <line
-            x1={courtX}
-            y1={courtY + courtHeight / 2}
-            x2={courtX + courtWidth}
-            y2={courtY + courtHeight / 2}
-            stroke="#374151"
-            strokeWidth="4"
-          />
-          
+
+          {/* Position labels for reference - Vertical Layout */}
+          {/* Home team positions (bottom half) */}
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '85%', transform: 'translate(-50%, -50%)' }}>P1</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '85%', transform: 'translate(-50%, -50%)' }}>P6</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '85%', transform: 'translate(-50%, -50%)' }}>P5</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '60%', transform: 'translate(-50%, -50%)' }}>P2</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '60%', transform: 'translate(-50%, -50%)' }}>P3</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '60%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+          {/* Away team positions (top half) */}
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '15%', transform: 'translate(-50%, -50%)' }}>P1</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '15%', transform: 'translate(-50%, -50%)' }}>P6</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '15%', transform: 'translate(-50%, -50%)' }}>P5</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '20%', top: '40%', transform: 'translate(-50%, -50%)' }}>P2</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '50%', top: '40%', transform: 'translate(-50%, -50%)' }}>P3</div>
+          <div className="absolute text-xs font-bold text-gray-600 bg-white bg-opacity-75 rounded px-1" style={{ left: '80%', top: '40%', transform: 'translate(-50%, -50%)' }}>P4</div>
+
+          {/* Team labels - Vertical Layout */}
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+            Away Team
+          </div>
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-2 py-1 rounded text-sm font-medium border">
+            Home Team
+          </div>
+
           {/* Heatmap points */}
           {heatmapData.map((point, index) => {
-            const x = courtX + (point.x / 20) * courtWidth;
-            const y = courtY + (point.y / 20) * courtHeight;
+            const x = (point.x / 20) * 100;
+            const y = (point.y / 20) * 100;
             const size = Math.max(8, Math.min(24, point.count * 2));
-            
+
             return (
-              <g key={index}>
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={size}
-                  fill={getColor(point)}
-                  opacity={0.7}
-                />
-                <title>
-                  {`Plays: ${point.count}\nTotal Points: ${point.totalValue}\nAvg Points: ${point.avgValue.toFixed(2)}`}
-                </title>
-              </g>
+              <div
+                key={index}
+                className="absolute rounded-full border-2 border-white shadow-lg z-10"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: `${size}px`,
+                  height: `${size}px`,
+                  backgroundColor: getColor(point),
+                  opacity: 0.8,
+                  transform: 'translate(-50%, -50%)'
+                }}
+                title={`Plays: ${point.count}\nTotal Points: ${point.totalValue}\nAvg Points: ${point.avgValue.toFixed(2)}`}
+              />
             );
           })}
-          
-          {/* Court labels */}
-          <text x={courtX + courtWidth / 2} y={courtY - 10} textAnchor="middle" className="text-sm font-medium fill-gray-700">
-            Volleyball Court
-          </text>
-          <text x={courtX + courtWidth / 2} y={courtY + 20} textAnchor="middle" className="text-xs fill-gray-500">
-            Team A
-          </text>
-          <text x={courtX + courtWidth / 2} y={courtY + courtHeight - 10} textAnchor="middle" className="text-xs fill-gray-500">
-            Team B
-          </text>
-        </svg>
+        </div>
         
         {/* Legend */}
         {showLegend && (

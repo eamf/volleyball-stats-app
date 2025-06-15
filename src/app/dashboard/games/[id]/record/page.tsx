@@ -130,6 +130,10 @@ export default function GameRecordingPage() {
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [isVideoReady, setIsVideoReady] = useState(false);
 
+  // Team selection for stats tracking
+  const [selectedTeamsForStats, setSelectedTeamsForStats] = useState<('home' | 'away')[]>(['home']);
+  const [showTeamSelection, setShowTeamSelection] = useState(true); // Show by default for initial setup
+
   // Debug function to test database permissions
   const testDatabasePermissions = async () => {
     try {
@@ -220,6 +224,10 @@ export default function GameRecordingPage() {
   useEffect(() => {
     if (currentSet) {
       fetchPlays();
+      // Also reload lineups when set changes
+      if (game) {
+        loadLineups(game);
+      }
     }
   }, [currentSet]);
   
@@ -274,6 +282,9 @@ export default function GameRecordingPage() {
 
       setHomePlayers(homePlayersData);
       setAwayPlayers(awayPlayersData);
+
+      // Load saved lineups for the current set
+      await loadLineups(gameData);
 
       // Fetch sets
       const { data: setsData, error: setsError } = await supabase
@@ -766,6 +777,112 @@ export default function GameRecordingPage() {
     }
   };
 
+  // Load saved lineups from database
+  const loadLineups = async (gameData: any) => {
+    if (!gameData) return;
+
+    try {
+      // Get the current set or the latest set
+      const { data: setsData } = await supabase
+        .from('game_sets')
+        .select('*')
+        .eq('game_id', gameData.id)
+        .order('set_number', { ascending: false })
+        .limit(1);
+
+      const latestSet = setsData?.[0];
+      if (!latestSet) return;
+
+      // Load lineups for the latest set
+      const { data: lineupsData, error } = await supabase
+        .from('game_lineups')
+        .select(`
+          *,
+          player:players(*)
+        `)
+        .eq('game_id', gameData.id)
+        .eq('set_id', latestSet.id)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('Error loading lineups:', error);
+        return;
+      }
+
+      if (lineupsData && lineupsData.length > 0) {
+        console.log('Loading saved lineups:', lineupsData);
+
+        // Separate home and away lineups
+        const homeLineupData: { [key: string]: Player | null } = {
+          P1: null, P2: null, P3: null, P4: null, P5: null, P6: null
+        };
+        const awayLineupData: { [key: string]: Player | null } = {
+          P1: null, P2: null, P3: null, P4: null, P5: null, P6: null
+        };
+
+        lineupsData.forEach((lineup: any) => {
+          if (lineup.position_number >= 1 && lineup.position_number <= 6) {
+            const position = `P${lineup.position_number}`;
+            if (lineup.team_id === gameData.home_team_id) {
+              homeLineupData[position] = lineup.player;
+            } else if (lineup.team_id === gameData.away_team_id) {
+              awayLineupData[position] = lineup.player;
+            }
+          }
+        });
+
+        setHomeLineup(homeLineupData);
+        setAwayLineup(awayLineupData);
+        console.log('Lineups loaded successfully');
+      }
+    } catch (err: any) {
+      console.error('Error loading lineups:', err);
+    }
+  };
+
+  // Save lineup to database
+  const saveLineup = async (team: 'home' | 'away', position: string, player: Player | null) => {
+    if (!currentSet || !game) return;
+
+    const teamId = team === 'home' ? game.home_team_id : game.away_team_id;
+    const positionNumber = parseInt(position.replace('P', ''));
+
+    try {
+      // First, deactivate any existing lineup entry for this position and set
+      await supabase
+        .from('game_lineups')
+        .update({ is_active: false })
+        .eq('game_id', game.id)
+        .eq('set_id', currentSet.id)
+        .eq('team_id', teamId)
+        .eq('position_number', positionNumber);
+
+      // If player is not null, create new active lineup entry
+      if (player) {
+        const { error } = await supabase
+          .from('game_lineups')
+          .insert({
+            game_id: game.id,
+            set_id: currentSet.id,
+            team_id: teamId,
+            player_id: player.id,
+            position_number: positionNumber,
+            is_active: true
+          });
+
+        if (error) {
+          console.error('Error saving lineup:', error);
+          throw error;
+        }
+      }
+
+      console.log(`Lineup saved: ${team} ${position} = ${player?.full_name || 'empty'}`);
+    } catch (err: any) {
+      console.error('Error saving lineup:', err);
+      setError(`Failed to save lineup: ${err.message}`);
+    }
+  };
+
   // Drag and drop functions
   const handleDragStart = (player: Player, team: 'home' | 'away') => {
     setDraggedPlayer(player);
@@ -776,7 +893,7 @@ export default function GameRecordingPage() {
     e.preventDefault();
   };
 
-  const handleDrop = (position: string, team: 'home' | 'away') => {
+  const handleDrop = async (position: string, team: 'home' | 'away') => {
     if (!draggedPlayer || !draggedFromTeam) return;
 
     if (draggedFromTeam !== team) return; // Can't drag between teams
@@ -796,11 +913,14 @@ export default function GameRecordingPage() {
     newLineup[position] = draggedPlayer;
     setLineup(newLineup);
 
+    // Save to database
+    await saveLineup(team, position, draggedPlayer);
+
     setDraggedPlayer(null);
     setDraggedFromTeam(null);
   };
 
-  const removePlayerFromCourt = (position: string, team: 'home' | 'away') => {
+  const removePlayerFromCourt = async (position: string, team: 'home' | 'away') => {
     const lineup = team === 'home' ? homeLineup : awayLineup;
     const setLineup = team === 'home' ? setHomeLineup : setAwayLineup;
 
@@ -808,6 +928,9 @@ export default function GameRecordingPage() {
       ...lineup,
       [position]: null
     });
+
+    // Save to database (null player removes the position)
+    await saveLineup(team, position, null);
   };
 
   const getAvailablePlayers = (team: 'home' | 'away') => {
@@ -1304,23 +1427,167 @@ export default function GameRecordingPage() {
 
 
 
-      {/* 1. Bench - First Priority for Recording */}
+      {/* 0. Team Selection for Stats Tracking */}
       {isRecording && currentSet && (
+        <Card className="p-4 mb-6 bg-blue-50 border-blue-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900">Stats Tracking Configuration</h3>
+              <p className="text-sm text-blue-700">Choose which team(s) you want to track statistics for</p>
+            </div>
+            <Button
+              onClick={() => setShowTeamSelection(!showTeamSelection)}
+              variant="outline"
+              size="sm"
+              className="border-blue-300 text-blue-700 hover:bg-blue-100"
+            >
+              {showTeamSelection ? 'Hide Options' : 'Configure Teams'}
+            </Button>
+          </div>
+
+          {showTeamSelection && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Home Team Option */}
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedTeamsForStats.includes('home')
+                      ? 'border-blue-500 bg-blue-100'
+                      : 'border-gray-300 bg-white hover:border-blue-300'
+                  }`}
+                  onClick={() => {
+                    if (selectedTeamsForStats.includes('home')) {
+                      setSelectedTeamsForStats(selectedTeamsForStats.filter(t => t !== 'home'));
+                    } else {
+                      setSelectedTeamsForStats([...selectedTeamsForStats, 'home']);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{homeTeam?.name || 'Home Team'}</h4>
+                      <p className="text-sm text-gray-600">Track home team stats</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      selectedTeamsForStats.includes('home')
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'border-gray-300'
+                    }`}>
+                      {selectedTeamsForStats.includes('home') && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Away Team Option */}
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedTeamsForStats.includes('away')
+                      ? 'border-blue-500 bg-blue-100'
+                      : 'border-gray-300 bg-white hover:border-blue-300'
+                  }`}
+                  onClick={() => {
+                    if (selectedTeamsForStats.includes('away')) {
+                      setSelectedTeamsForStats(selectedTeamsForStats.filter(t => t !== 'away'));
+                    } else {
+                      setSelectedTeamsForStats([...selectedTeamsForStats, 'away']);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{awayTeam?.name || 'Away Team'}</h4>
+                      <p className="text-sm text-gray-600">Track away team stats</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      selectedTeamsForStats.includes('away')
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'border-gray-300'
+                    }`}>
+                      {selectedTeamsForStats.includes('away') && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Both Teams Option */}
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedTeamsForStats.length === 2
+                      ? 'border-green-500 bg-green-100'
+                      : 'border-gray-300 bg-white hover:border-green-300'
+                  }`}
+                  onClick={() => {
+                    if (selectedTeamsForStats.length === 2) {
+                      setSelectedTeamsForStats(['home']); // Default to home only
+                    } else {
+                      setSelectedTeamsForStats(['home', 'away']);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">Both Teams</h4>
+                      <p className="text-sm text-gray-600">Track both teams' stats</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 ${
+                      selectedTeamsForStats.length === 2
+                        ? 'bg-green-500 border-green-500'
+                        : 'border-gray-300'
+                    }`}>
+                      {selectedTeamsForStats.length === 2 && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  <strong>Current Selection:</strong> {
+                    selectedTeamsForStats.length === 0 ? 'No teams selected' :
+                    selectedTeamsForStats.length === 1 ?
+                      `${selectedTeamsForStats[0] === 'home' ? homeTeam?.name || 'Home Team' : awayTeam?.name || 'Away Team'} only` :
+                      'Both teams'
+                  }
+                </p>
+                {selectedTeamsForStats.length === 0 && (
+                  <p className="text-xs text-red-600 mt-1">⚠️ Please select at least one team to track statistics</p>
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 1. Bench - First Priority for Recording */}
+      {isRecording && currentSet && selectedTeamsForStats.length > 0 && (
         <Card className="p-4 mb-6">
           <h3 className="text-lg font-semibold mb-4">Lineup & Bench</h3>
 
-          {/* Home Team Only */}
-          <div className="max-w-2xl mx-auto">
-            {/* Team Name at Top */}
-            <div className="text-center mb-4">
-              <h4 className="text-lg font-semibold flex items-center justify-center">
-                <div
-                  className="w-5 h-5 rounded-full mr-2"
-                  style={{ backgroundColor: homeTeam?.team_color }}
-                />
-                {homeTeam?.name}
-              </h4>
-            </div>
+          <div className="space-y-6">
+            {/* Home Team Section */}
+            {selectedTeamsForStats.includes('home') && (
+              <div className="max-w-2xl mx-auto">
+                {/* Team Name at Top */}
+                <div className="text-center mb-4">
+                  <h4 className="text-lg font-semibold flex items-center justify-center">
+                    <div
+                      className="w-5 h-5 rounded-full mr-2"
+                      style={{ backgroundColor: homeTeam?.team_color }}
+                    />
+                    {homeTeam?.name}
+                  </h4>
+                </div>
 
             {/* Position Boxes - Larger for better usability */}
             <div className="grid grid-cols-3 gap-3 mb-4">
@@ -1383,7 +1650,88 @@ export default function GameRecordingPage() {
                   </div>
                 ))}
               </div>
-            </div>
+                </div>
+              </div>
+            )}
+
+            {/* Away Team Section */}
+            {selectedTeamsForStats.includes('away') && (
+              <div className="max-w-2xl mx-auto">
+                {/* Team Name at Top */}
+                <div className="text-center mb-4">
+                  <h4 className="text-lg font-semibold flex items-center justify-center">
+                    <div
+                      className="w-5 h-5 rounded-full mr-2"
+                      style={{ backgroundColor: awayTeam?.team_color }}
+                    />
+                    {awayTeam?.name}
+                  </h4>
+                </div>
+
+                {/* Position Boxes - Larger for better usability */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { pos: 'P4', label: 'P4' },
+                    { pos: 'P3', label: 'P3' },
+                    { pos: 'P2', label: 'P2' },
+                    { pos: 'P5', label: 'P5' },
+                    { pos: 'P6', label: 'P6' },
+                    { pos: 'P1', label: 'P1' }
+                  ].map(({ pos, label }) => (
+                    <div
+                      key={pos}
+                      className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center min-h-[80px] flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDrop(pos, 'away')}
+                    >
+                      <div className="text-sm font-medium text-gray-600 mb-1">{label}</div>
+                      {awayLineup[pos] ? (
+                        <div
+                          className="bg-red-100 border border-red-300 rounded px-2 py-1 cursor-pointer hover:bg-red-200 text-sm"
+                          onClick={() => removePlayerFromCourt(pos, 'away')}
+                        >
+                          <div className="font-bold">#{awayLineup[pos]!.jersey_number}</div>
+                          <div className="text-xs truncate max-w-[60px]">
+                            {awayLineup[pos]!.full_name.split(' ')[0]}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-gray-400 text-sm">Empty</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bench - Larger grid for better visibility */}
+                <div>
+                  <h5 className="text-base font-medium text-gray-700 mb-3">Bench</h5>
+                  <div className="grid grid-cols-4 gap-2">
+                    {getAvailablePlayers('away').map((player) => (
+                      <div
+                        key={player.id}
+                        draggable
+                        onDragStart={() => handleDragStart(player, 'away')}
+                        onClick={() => setSelectedPlayer(player)}
+                        className={`p-2 rounded-lg text-center text-sm border transition-colors cursor-move ${
+                          selectedPlayer?.id === player.id
+                            ? 'bg-red-100 border-red-300 ring-2 ring-red-200'
+                            : 'bg-white border-gray-200 hover:bg-gray-50'
+                        }`}
+                        title={player.full_name}
+                      >
+                        <div className="font-bold text-sm">#{player.jersey_number}</div>
+                        <div className="text-xs truncate">
+                          {player.full_name.split(' ')[0]}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {player.primary_position}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 text-center text-sm text-gray-600">
@@ -1568,25 +1916,72 @@ export default function GameRecordingPage() {
                       </div>
                     )}
 
-                    {/* Away Team - Single Player Option */}
+                    {/* Away Team Players */}
                     {selectedTeam === 'away' && (
                       <div>
-                        <button
-                          onClick={() => setSelectedPlayer(null)}
-                          className="w-full p-3 rounded-lg border text-center text-sm transition-colors bg-red-50 border-red-200 hover:bg-red-100"
-                        >
-                          <div className="font-medium flex items-center justify-center">
-                            <div
-                              className="w-3 h-3 rounded-full mr-2"
-                              style={{ backgroundColor: awayTeam?.team_color }}
-                            />
-                            {awayTeam?.name} Player
+                        {selectedTeamsForStats.includes('away') ? (
+                          // If tracking away team stats, show their lineup
+                          <div>
+                            {/* Team Play Option */}
+                            <button
+                              onClick={() => setSelectedPlayer(null)}
+                              className={`w-full p-2 rounded-lg border text-center text-sm transition-colors mb-2 ${
+                                selectedPlayer === null
+                                  ? 'bg-red-100 border-red-300 ring-2 ring-red-200'
+                                  : 'bg-white border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="font-medium">Team Play</div>
+                              <div className="text-xs text-gray-500">No specific player</div>
+                            </button>
+
+                            {/* Players from Away Lineup */}
+                            <div>
+                              <h5 className="text-xs font-medium text-gray-700 mb-2">Players on Court</h5>
+                              <div className="space-y-1">
+                                {Object.values(awayLineup).filter(player => player !== null).map((player) => (
+                                  <button
+                                    key={player!.id}
+                                    onClick={() => setSelectedPlayer(player)}
+                                    className={`w-full p-2 rounded border text-left text-xs transition-colors ${
+                                      selectedPlayer?.id === player!.id
+                                        ? 'bg-red-100 border-red-300 ring-1 ring-red-200'
+                                        : 'bg-red-50 border-red-200 hover:bg-red-100'
+                                    }`}
+                                  >
+                                    <div className="font-medium">#{player!.jersey_number} {player!.full_name}</div>
+                                    <div className="text-xs text-gray-500">{player!.primary_position}</div>
+                                  </button>
+                                ))}
+                              </div>
+                              {Object.values(awayLineup).filter(player => player !== null).length === 0 && (
+                                <div className="text-center text-gray-500 py-2 text-xs">
+                                  No players in lineup. Drag players from bench to positions.
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">Generic opponent player</div>
-                        </button>
-                        <div className="mt-2 text-xs text-center text-gray-600 bg-gray-100 p-2 rounded">
-                          All plays for {awayTeam?.name} will be recorded as team plays
-                        </div>
+                        ) : (
+                          // If not tracking away team stats, show generic option
+                          <div>
+                            <button
+                              onClick={() => setSelectedPlayer(null)}
+                              className="w-full p-3 rounded-lg border text-center text-sm transition-colors bg-red-50 border-red-200 hover:bg-red-100"
+                            >
+                              <div className="font-medium flex items-center justify-center">
+                                <div
+                                  className="w-3 h-3 rounded-full mr-2"
+                                  style={{ backgroundColor: awayTeam?.team_color }}
+                                />
+                                {awayTeam?.name} Player
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">Generic opponent player</div>
+                            </button>
+                            <div className="mt-2 text-xs text-center text-gray-600 bg-gray-100 p-2 rounded">
+                              All plays for {awayTeam?.name} will be recorded as team plays
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1606,48 +2001,52 @@ export default function GameRecordingPage() {
                   {/* Team Selection */}
                   <div className="mb-3">
                     <div className="text-xs font-medium text-gray-700 mb-2">Team:</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedTeam('home');
-                          // Keep player selection from court/bench
-                        }}
-                        className={`p-2 rounded text-xs border transition-colors ${
-                          selectedTeam === 'home'
-                            ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center justify-center">
-                          <div
-                            className="w-2 h-2 rounded-full mr-1"
-                            style={{ backgroundColor: homeTeam?.team_color }}
-                          />
-                          <span className="font-medium">{homeTeam?.name}</span>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedTeam('away');
-                          // For away team, set a generic "their player" option
-                          setSelectedPlayer(null);
-                        }}
-                        className={`p-2 rounded text-xs border transition-colors ${
-                          selectedTeam === 'away'
-                            ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center justify-center">
-                          <div
-                            className="w-2 h-2 rounded-full mr-1"
-                            style={{ backgroundColor: awayTeam?.team_color }}
-                          />
-                          <span className="font-medium">{awayTeam?.name}</span>
-                        </div>
-                      </button>
+                    <div className={`grid gap-2 ${selectedTeamsForStats.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {selectedTeamsForStats.includes('home') && (
+                        <button
+                          onClick={() => {
+                            setSelectedTeam('home');
+                            // Keep player selection from court/bench
+                          }}
+                          className={`p-2 rounded text-xs border transition-colors ${
+                            selectedTeam === 'home'
+                              ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center">
+                            <div
+                              className="w-2 h-2 rounded-full mr-1"
+                              style={{ backgroundColor: homeTeam?.team_color }}
+                            />
+                            <span className="font-medium">{homeTeam?.name}</span>
+                          </div>
+                        </button>
+                      )}
+                      {selectedTeamsForStats.includes('away') && (
+                        <button
+                          onClick={() => {
+                            setSelectedTeam('away');
+                            // For away team, set a generic "their player" option
+                            setSelectedPlayer(null);
+                          }}
+                          className={`p-2 rounded text-xs border transition-colors ${
+                            selectedTeam === 'away'
+                              ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center">
+                            <div
+                              className="w-2 h-2 rounded-full mr-1"
+                              style={{ backgroundColor: awayTeam?.team_color }}
+                            />
+                            <span className="font-medium">{awayTeam?.name}</span>
+                          </div>
+                        </button>
+                      )}
                     </div>
-                    {selectedTeam === 'away' && (
+                    {selectedTeam === 'away' && !selectedTeamsForStats.includes('away') && (
                       <div className="mt-1 text-xs text-center text-gray-500 bg-gray-50 p-1 rounded">
                         Recording for opponent team (generic player)
                       </div>
@@ -1656,7 +2055,23 @@ export default function GameRecordingPage() {
 
                   {/* Play Type Selection */}
                   <div className="mb-3 flex-1">
-                    <div className="text-xs font-medium text-gray-700 mb-2">Play Type:</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-medium text-gray-700">Play Type:</div>
+                      <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <div className="flex items-center">
+                          <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
+                          <span>+</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2 h-2 rounded-full bg-red-500 mr-1"></div>
+                          <span>-</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2 h-2 rounded-full bg-gray-400 mr-1"></div>
+                          <span>0</span>
+                        </div>
+                      </div>
+                    </div>
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {Object.entries(playTypes.reduce((acc, playType) => {
                         if (!acc[playType.category]) {
@@ -1678,10 +2093,23 @@ export default function GameRecordingPage() {
                                 className={`p-2 rounded border text-left text-xs transition-all ${
                                   selectedPlayType?.id === playType.id
                                     ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200 shadow-sm'
-                                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                                    : playType.default_value > 0
+                                      ? 'bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300'
+                                      : playType.default_value < 0
+                                        ? 'bg-red-50 border-red-200 hover:bg-red-100 hover:border-red-300'
+                                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                                 }`}
                               >
-                                <div className="font-medium">{playType.name}</div>
+                                <div className="flex items-center">
+                                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                                    playType.default_value > 0
+                                      ? 'bg-green-500'
+                                      : playType.default_value < 0
+                                        ? 'bg-red-500'
+                                        : 'bg-gray-400'
+                                  }`}></div>
+                                  <div className="font-medium">{playType.name}</div>
+                                </div>
                                 <div className={`text-xs ${
                                   playType.default_value > 0 ? 'text-green-600' :
                                   playType.default_value < 0 ? 'text-red-600' : 'text-gray-500'
@@ -1879,7 +2307,11 @@ export default function GameRecordingPage() {
                           style={{
                             left: `${play.field_x}%`,
                             top: `${play.field_y}%`,
-                            backgroundColor: play.play_type?.is_positive ? '#10b981' : '#ef4444',
+                            backgroundColor: (play.play_type?.default_value || 0) > 0
+                              ? '#10b981'
+                              : (play.play_type?.default_value || 0) < 0
+                                ? '#ef4444'
+                                : '#6b7280',
                             transform: 'translate(-50%, -50%)'
                           }}
                           title={`${play.player?.full_name || 'Team'} - ${play.play_type?.name}`}
@@ -1944,11 +2376,11 @@ export default function GameRecordingPage() {
                     <div
                       className="w-3 h-3 rounded-full"
                       style={{
-                        backgroundColor: play.play_type?.is_positive
+                        backgroundColor: (play.play_type?.default_value || 0) > 0
                           ? '#10b981'
-                          : play.play_type?.default_value === 0
-                            ? '#6b7280'
-                            : '#ef4444'
+                          : (play.play_type?.default_value || 0) < 0
+                            ? '#ef4444'
+                            : '#6b7280'
                       }}
                     />
                     <div>

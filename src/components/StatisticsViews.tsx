@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { CourtHeatmap } from '@/components/CourtHeatmap';
-import { Trophy, Target, TrendingUp, TrendingDown, Activity, Users } from 'lucide-react';
+import { Trophy, Target, TrendingUp, TrendingDown, Activity, Users, ChevronRight, ChevronDown } from 'lucide-react';
 
 // Types (same as in statistics page)
 type Player = {
@@ -68,20 +69,43 @@ type TeamStats = {
 };
 
 // Overview Component
-export function OverviewView({ 
-  overallStats, 
-  plays, 
-  topPlayers, 
-  topTeams 
-}: { 
+export function OverviewView({
+  overallStats,
+  plays,
+  topPlayers,
+  topTeams,
+  playTypes
+}: {
   overallStats: StatsSummary | null;
   plays: Play[];
   topPlayers: PlayerStats[];
   topTeams: TeamStats[];
+  playTypes: PlayType[];
 }) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
   if (!overallStats) {
     return <div>No data available</div>;
   }
+
+  // Group play types by category for drill-down
+  const playTypesByCategory = playTypes.reduce((acc, playType) => {
+    if (!acc[playType.category]) {
+      acc[playType.category] = [];
+    }
+    acc[playType.category].push(playType);
+    return acc;
+  }, {} as Record<string, PlayType[]>);
+
+  // Calculate play type statistics
+  const getPlayTypeStats = (playTypeId: string) => {
+    const playTypeStats = plays.filter(p => p.play_type_id === playTypeId);
+    return {
+      count: playTypeStats.length,
+      totalValue: playTypeStats.reduce((sum, p) => sum + p.value, 0),
+      percentage: overallStats.totalPlays > 0 ? (playTypeStats.length / overallStats.totalPlays) * 100 : 0
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -130,24 +154,72 @@ export function OverviewView({
 
       {/* Charts and Heatmap */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Play Categories Chart */}
+        {/* Play Categories Chart with Drill-down */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Plays by Category</h3>
           <div className="space-y-3">
             {Object.entries(overallStats.playsByCategory).map(([category, count]) => {
               const percentage = (count / overallStats.totalPlays) * 100;
+              const isExpanded = expandedCategory === category;
+              const categoryPlayTypes = playTypesByCategory[category] || [];
+
               return (
                 <div key={category}>
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">{category}</span>
+                  {/* Category Header */}
+                  <div
+                    className="flex items-center justify-between text-sm cursor-pointer hover:bg-gray-50 p-2 rounded"
+                    onClick={() => setExpandedCategory(isExpanded ? null : category)}
+                  >
+                    <div className="flex items-center">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 mr-2 text-gray-500" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 mr-2 text-gray-500" />
+                      )}
+                      <span className="font-medium">{category}</span>
+                    </div>
                     <span>{count} plays ({percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full" 
+
+                  {/* Category Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
+
+                  {/* Expanded Play Types */}
+                  {isExpanded && (
+                    <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                      {categoryPlayTypes.map((playType) => {
+                        const stats = getPlayTypeStats(playType.id);
+                        return (
+                          <div key={playType.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center">
+                              <div className={`w-2 h-2 rounded-full mr-2 ${
+                                playType.value > 0
+                                  ? 'bg-green-500'
+                                  : playType.value < 0
+                                    ? 'bg-red-500'
+                                    : 'bg-gray-400'
+                              }`}></div>
+                              <span>{playType.name}</span>
+                            </div>
+                            <div className="text-right">
+                              <div>{stats.count} plays ({stats.percentage.toFixed(1)}%)</div>
+                              <div className={`text-xs ${
+                                stats.totalValue > 0 ? 'text-green-600' :
+                                stats.totalValue < 0 ? 'text-red-600' : 'text-gray-500'
+                              }`}>
+                                {stats.totalValue > 0 ? '+' : ''}{stats.totalValue} pts
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
