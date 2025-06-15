@@ -6,8 +6,9 @@ import { createClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { ArrowLeft, Play, Pause, RotateCcw, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Play, Pause, RotateCcw, Plus, Minus, Video, VideoOff } from 'lucide-react';
 import '@/styles/volleyball-court.css';
+import { YouTubePlayer } from '@/components/video/YouTubePlayer';
 
 // Define types
 type Game = {
@@ -22,6 +23,7 @@ type Game = {
   away_score: number;
   completed_at: string | null;
   notes: string | null;
+  video_url: string | null; // YouTube video URL
 };
 
 type Team = {
@@ -44,6 +46,7 @@ type PlayType = {
   id: string;
   name: string;
   default_value: number;
+  default_score_increment: number; // Default score increment for this play type
   category: string;
   is_positive: boolean;
   description: string | null;
@@ -58,10 +61,13 @@ type Play = {
   team_id: string;
   field_x: number | null;
   field_y: number | null;
-  value: number;
+  value: number; // Statistical value
+  score_increment: number; // Score increment: 1 = point for team, -1 = point for opponent, 0 = no score change
   timestamp_in_set: string;
   rotation_position: number | null;
   notes: string | null;
+  comment: string | null; // Comment explaining the play
+  video_timestamp: number | null; // Video timestamp in seconds
   created_at: string;
   player?: Player;
   play_type?: PlayType;
@@ -117,6 +123,12 @@ export default function GameRecordingPage() {
   // Play editing state
   const [editingPlay, setEditingPlay] = useState<Play | null>(null);
   const [showPlayHistory, setShowPlayHistory] = useState(false);
+
+  // Video player state
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   // Debug function to test database permissions
   const testDatabasePermissions = async () => {
@@ -226,6 +238,12 @@ export default function GameRecordingPage() {
       
       if (gameError) throw gameError;
       setGame(gameData);
+
+      // Initialize video URL if available
+      if (gameData.video_url) {
+        setVideoUrl(gameData.video_url);
+        setShowVideoPlayer(true);
+      }
       
       // Fetch teams
       const { data: teamsData, error: teamsError } = await supabase
@@ -671,9 +689,12 @@ export default function GameRecordingPage() {
         field_x: fieldX || null,
         field_y: fieldY || null,
         value: selectedPlayType.default_value,
+        score_increment: selectedPlayType.default_score_increment || 0,
         timestamp_in_set: new Date().toISOString(),
         rotation_position: null,
-        notes: null
+        notes: null,
+        comment: null,
+        video_timestamp: isVideoReady ? currentVideoTime : null
       };
 
       const { error } = await supabase
@@ -687,18 +708,17 @@ export default function GameRecordingPage() {
 
       console.log('Play recorded successfully');
 
-      // Update set score if play has a point value
-      if (selectedPlayType.default_value !== 0) {
-        console.log('Updating score:', selectedPlayType.default_value);
-        // Positive plays give points to the team that made the play
-        // Negative plays (errors) give points to the opponent
-        if (selectedPlayType.default_value > 0) {
+      // Update score based on play type score increment
+      const scoreIncrement = selectedPlayType.default_score_increment || 0;
+      if (scoreIncrement !== 0) {
+        console.log('Updating score:', scoreIncrement);
+        if (scoreIncrement > 0) {
           // Team scored a point (ace, kill, etc.)
-          await updateSetScore(selectedTeam, selectedPlayType.default_value);
+          await updateSetScore(selectedTeam, scoreIncrement);
         } else {
-          // Team made an error, opponent gets the point
+          // Point goes to opponent (team error, etc.)
           const opponentTeam = selectedTeam === 'home' ? 'away' : 'home';
-          await updateSetScore(opponentTeam, Math.abs(selectedPlayType.default_value));
+          await updateSetScore(opponentTeam, Math.abs(scoreIncrement));
         }
       }
 
@@ -854,18 +874,18 @@ export default function GameRecordingPage() {
       }
 
       // Only reverse score if deletion was successful
-      if (play.value !== 0) {
-        console.log('Reversing score change for value:', play.value);
-        if (play.value > 0) {
+      if (play.score_increment !== 0) {
+        console.log('Reversing score change for increment:', play.score_increment);
+        if (play.score_increment > 0) {
           // Play gave points to the team, remove them
           const teamThatScored = play.team_id === game?.home_team_id ? 'home' : 'away';
           console.log('Removing points from team:', teamThatScored);
-          await updateSetScore(teamThatScored, -play.value);
+          await updateSetScore(teamThatScored, -play.score_increment);
         } else {
-          // Play was an error, remove points from opponent
+          // Play gave points to opponent, remove them from opponent
           const opponentTeam = play.team_id === game?.home_team_id ? 'away' : 'home';
-          console.log('Removing error points from opponent:', opponentTeam);
-          await updateSetScore(opponentTeam, play.value); // play.value is negative, so this removes points
+          console.log('Removing points from opponent:', opponentTeam);
+          await updateSetScore(opponentTeam, play.score_increment); // score_increment is negative, so this removes points
         }
       }
 
@@ -1372,7 +1392,120 @@ export default function GameRecordingPage() {
         </Card>
       )}
 
-      {/* 2. Play Selection Widget & Court - Side by Side */}
+      {/* 2. Video Analysis Section */}
+      {isRecording && currentSet && (
+        <Card className="p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Video Analysis</h3>
+            <div className="flex items-center space-x-2">
+              {!game?.video_url && (
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Enter YouTube URL..."
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (videoUrl) {
+                        // Update game with video URL
+                        supabase
+                          .from('games')
+                          .update({ video_url: videoUrl })
+                          .eq('id', gameId)
+                          .then(() => {
+                            if (game) {
+                              setGame({ ...game, video_url: videoUrl });
+                            }
+                          });
+                      }
+                    }}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    Add Video
+                  </Button>
+                </div>
+              )}
+              {(game?.video_url || videoUrl) && (
+                <Button
+                  onClick={() => setShowVideoPlayer(!showVideoPlayer)}
+                  variant="outline"
+                  size="sm"
+                >
+                  {showVideoPlayer ? 'Hide Video' : 'Show Video'}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {showVideoPlayer && (game?.video_url || videoUrl) && (
+            <div className="grid grid-cols-12 gap-4">
+              {/* Video Player */}
+              <div className="col-span-8">
+                <YouTubePlayer
+                  videoUrl={game?.video_url || videoUrl}
+                  onTimeUpdate={setCurrentVideoTime}
+                  onReady={() => setIsVideoReady(true)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Video Controls & Info */}
+              <div className="col-span-4">
+                <div className="bg-gray-50 rounded-lg p-4 h-full">
+                  <h4 className="text-sm font-semibold mb-3">Video Controls</h4>
+
+                  <div className="space-y-3">
+                    <div className="text-xs">
+                      <div className="text-gray-600">Current Time:</div>
+                      <div className="font-mono text-sm">
+                        {Math.floor(currentVideoTime / 60)}:{(currentVideoTime % 60).toFixed(1).padStart(4, '0')}
+                      </div>
+                    </div>
+
+                    <div className="text-xs">
+                      <div className="text-gray-600 mb-1">Quick Actions:</div>
+                      <div className="space-y-1">
+                        <Button
+                          onClick={() => {
+                            const player = (window as any).youtubePlayer;
+                            if (player) player.seekTo(currentVideoTime - 10);
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-xs"
+                        >
+                          ⏪ -10s
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const player = (window as any).youtubePlayer;
+                            if (player) player.seekTo(currentVideoTime + 10);
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-xs"
+                        >
+                          ⏩ +10s
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                      💡 Tip: Video timestamp will be automatically recorded with each play
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 3. Play Selection Widget & Court - Side by Side */}
       {isRecording && currentSet && (
         <div className="mb-6">
           {/* Side-by-side layout: Play Selection on left, Court on right */}
@@ -1791,9 +1924,22 @@ export default function GameRecordingPage() {
           {plays.length > 0 ? (
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {(showPlayHistory ? plays : plays.slice(-10)).reverse().map((play) => (
-                <div key={play.id} className={`flex items-center justify-between p-3 rounded-lg border ${
-                  editingPlay?.id === play.id ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
-                }`}>
+                <div
+                  key={play.id}
+                  className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                    editingPlay?.id === play.id ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
+                  onClick={() => {
+                    // Jump to video timestamp if available
+                    if (play.video_timestamp && isVideoReady) {
+                      const player = (window as any).youtubePlayer;
+                      if (player) {
+                        player.seekTo(play.video_timestamp);
+                      }
+                    }
+                  }}
+                  title={play.video_timestamp ? `Click to jump to video time ${Math.floor(play.video_timestamp / 60)}:${(play.video_timestamp % 60).toFixed(0).padStart(2, '0')}` : undefined}
+                >
                   <div className="flex items-center space-x-3">
                     <div
                       className="w-3 h-3 rounded-full"
@@ -1818,10 +1964,22 @@ export default function GameRecordingPage() {
                       </div>
                       <div className="text-xs text-gray-600">
                         {play.play_type?.name}
-                        {play.value > 0 && <span className="text-green-600 ml-1">(+{play.value})</span>}
-                        {play.value < 0 && <span className="text-red-600 ml-1">({play.value})</span>}
+                        {play.value > 0 && <span className="text-green-600 ml-1">(+{play.value} stat)</span>}
+                        {play.value < 0 && <span className="text-red-600 ml-1">({play.value} stat)</span>}
+                        {play.score_increment > 0 && <span className="text-blue-600 ml-1">(+{play.score_increment} score)</span>}
+                        {play.score_increment < 0 && <span className="text-orange-600 ml-1">({play.score_increment} score)</span>}
                         {play.field_x && play.field_y && <span className="text-blue-600 ml-1">(positioned)</span>}
+                        {play.video_timestamp && (
+                          <span className="text-purple-600 ml-1">
+                            (📹 {Math.floor(play.video_timestamp / 60)}:{(play.video_timestamp % 60).toFixed(0).padStart(2, '0')})
+                          </span>
+                        )}
                       </div>
+                      {play.comment && (
+                        <div className="text-xs text-gray-500 italic mt-1">
+                          💬 {play.comment}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">

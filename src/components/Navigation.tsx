@@ -3,9 +3,9 @@
 import { createContext, useContext, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Home, Users, Trophy, Calendar, BarChart2, 
-  User, LogOut, Menu, X 
+import {
+  Home, Users, Trophy, Calendar, BarChart2,
+  User, LogOut, Menu, X, Target, Folder
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import clsx from 'clsx';
@@ -29,6 +29,8 @@ const navItems = [
   { id: 'championships', label: 'Championships', icon: <Trophy className="h-5 w-5" />, path: '/dashboard/championships' },
   { id: 'teams', label: 'Teams', icon: <Users className="h-5 w-5" />, path: '/dashboard/teams' },
   { id: 'players', label: 'Players', icon: <Users className="h-5 w-5" />, path: '/dashboard/players' },
+  { id: 'categories', label: 'Categories', icon: <Folder className="h-5 w-5" />, path: '/dashboard/categories' },
+  { id: 'play-types', label: 'Play Types', icon: <Target className="h-5 w-5" />, path: '/dashboard/play-types' },
   { id: 'games', label: 'Games', icon: <Calendar className="h-5 w-5" />, path: '/dashboard/games' },
   { id: 'statistics', label: 'Statistics', icon: <BarChart2 className="h-5 w-5" />, path: '/dashboard/statistics' },
   { id: 'profile', label: 'Profile', icon: <User className="h-5 w-5" />, path: '/dashboard/profile' },
